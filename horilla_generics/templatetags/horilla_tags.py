@@ -8,12 +8,12 @@ from django.apps import apps
 from django.db import models
 from django.db.models import Manager, QuerySet
 from django.forms import BaseForm
-from django.template.loader import render_to_string
 from django.templatetags.static import static
-from django.urls import NoReverseMatch, resolve, reverse
+from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 from django.utils.encoding import force_str
 from django.utils.safestring import mark_safe
+from django.utils.translation import gettext_lazy as _
 
 from horilla.menu.sub_section_menu import get_sub_section_menu
 from horilla.registry.js_registry import get_registered_js
@@ -87,7 +87,17 @@ def get_field(obj, field_path):
             return current.strftime(time_format)
 
         elif isinstance(current, bool):
-            return "Yes" if current else "No"
+            return _("Yes") if current else _("No")
+
+        elif parent is not None and final_field_name:
+            try:
+                field = parent._meta.get_field(final_field_name)
+                if hasattr(field, "choices") and field.choices:
+                    display_method = f"get_{final_field_name}_display"
+                    if hasattr(parent, display_method):
+                        return getattr(parent, display_method)()
+            except Exception:
+                pass
 
         return str(current) if current is not None else ""
     except Exception:

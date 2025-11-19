@@ -636,22 +636,13 @@ class ScheduleExportListView(LoginRequiredMixin, HorillaListView):
     enable_sorting = False
     no_record_section = False
 
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (instance._meta.get_field("modules").verbose_name, "module_names_display"),
-            (
-                instance._meta.get_field("export_format").verbose_name,
-                "get_export_format_display",
-            ),
-            (
-                instance._meta.get_field("frequency").verbose_name,
-                "get_frequency_display",
-            ),
-            (_("Schedule Details"), "frequency_display"),
-            (instance._meta.get_field("last_run").verbose_name, "last_executed"),
-        ]
+    columns = [
+        (_("Modules"), "module_names_display"),
+        "export_format",
+        "frequency",
+        (_("Schedule Details"), "frequency_display"),
+        (_("Last Executed On"), "last_executed"),
+    ]
 
     @cached_property
     def actions(self):

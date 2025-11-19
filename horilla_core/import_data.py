@@ -2298,30 +2298,18 @@ class ImportHistoryView(LoginRequiredMixin, HorillaListView):
         {"error_file_path": {"style": "width: 500px;"}},
     ]
 
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (instance._meta.get_field("import_name").verbose_name, "import_name"),
-            (instance._meta.get_field("module_name").verbose_name, "module_name"),
-            (
-                instance._meta.get_field("original_filename").verbose_name,
-                "original_filename",
-            ),
-            (instance._meta.get_field("status").verbose_name, "get_status_display"),
-            (instance._meta.get_field("success_rate").verbose_name, "success_rate"),
-            (
-                instance._meta.get_field("duration_seconds").verbose_name,
-                "duration_seconds",
-            ),
-            (instance._meta.get_field("created_at").verbose_name, "created_at"),
-            (instance._meta.get_field("created_by").verbose_name, "created_by"),
-            (
-                instance._meta.get_field("imported_file_path").verbose_name,
-                "imported_file",
-            ),
-            (instance._meta.get_field("error_file_path").verbose_name, "error_list"),
-        ]
+    columns = [
+        "import_name",
+        "module_name",
+        "original_filename",
+        "status",
+        "success_rate",
+        "duration_seconds",
+        "created_at",
+        "created_by",
+        (_("Imported File"), "imported_file"),
+        (_("Error File"), "error_list"),
+    ]
 
 
 @method_decorator(

@@ -104,23 +104,7 @@ class CustomerRoleListView(LoginRequiredMixin, HorillaListView):
         {"description": {"style": "width: 300px;"}},
     ]
 
-    def no_record_add_button(self):
-        if self.request.user.has_perm("horilla_core.add_customerrole"):
-            return {
-                "url": f"""{ reverse_lazy('horilla_core:customer_role_create_form')}?new=true""",
-                "attrs": 'id="customer-role-create"',
-            }
-
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (
-                instance._meta.get_field("customer_role_name").verbose_name,
-                "customer_role_name",
-            ),
-            (instance._meta.get_field("description").verbose_name, "description"),
-        ]
+    columns = ["customer_role_name", "description"]
 
     @cached_property
     def actions(self):

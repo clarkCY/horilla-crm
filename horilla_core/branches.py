@@ -103,26 +103,13 @@ class BranchListView(LoginRequiredMixin, HorillaListView):
     table_width = False
     bulk_select_option = False
 
-    def no_record_add_button(self):
-        if self.request.user.has_perm("horilla_core.add_company"):
-            return {
-                "url": f"""{ reverse_lazy('horilla_core:create_company')}?new=true""",
-                "attrs": 'id="branch-create"',
-            }
-
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (instance._meta.get_field("name").verbose_name, "get_avatar_with_name"),
-            (instance._meta.get_field("email").verbose_name, "email"),
-            (
-                instance._meta.get_field("no_of_employees").verbose_name,
-                "no_of_employees",
-            ),
-            (instance._meta.get_field("hq").verbose_name, "hq"),
-            (instance._meta.get_field("currency").verbose_name, "currency"),
-        ]
+    columns = [
+        (_("Name"), "get_avatar_with_name"),
+        "email",
+        "no_of_employees",
+        "hq",
+        "currency",
+    ]
 
     @cached_property
     def actions(self):

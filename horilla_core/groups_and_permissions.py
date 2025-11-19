@@ -1557,14 +1557,11 @@ class SuperUserTab(LoginRequiredMixin, HorillaListView):
     list_column_visibility = False
     bulk_select_option = False
 
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (_("First Name"), "get_avatar_with_name"),
-            (instance._meta.get_field("role").verbose_name, "role"),
-            (_("Super User Status"), "super_user_status_col"),
-        ]
+    columns = [
+        (_("First Name"), "get_avatar_with_name"),
+        "role",
+        (_("Super User Status"), "super_user_status_col"),
+    ]
 
     def get_queryset(self):
         queryset = super().get_queryset()

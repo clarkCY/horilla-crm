@@ -113,26 +113,14 @@ class CampaignListView(LoginRequiredMixin, HorillaListView):
     search_url = reverse_lazy("campaigns:campaign_list_view")
     main_url = reverse_lazy("campaigns:campaign_view")
 
-    @cached_property
-    def columns(self):
-        """
-        Function to return columns for the list view
-        """
-        instance = self.model()
-        return [
-            (instance._meta.get_field("campaign_name").verbose_name, "campaign_name"),
-            (
-                instance._meta.get_field("campaign_type").verbose_name,
-                "get_campaign_type_display",
-            ),
-            (instance._meta.get_field("campaign_owner").verbose_name, "campaign_owner"),
-            (instance._meta.get_field("status").verbose_name, "get_status_display"),
-            (
-                instance._meta.get_field("expected_revenue").verbose_name,
-                "expected_revenue",
-            ),
-            (instance._meta.get_field("budget_cost").verbose_name, "budget_cost"),
-        ]
+    columns = [
+        "campaign_name",
+        "campaign_type",
+        "campaign_owner",
+        "status",
+        "expected_revenue",
+        "budget_cost",
+    ]
 
     @cached_property
     def col_attrs(self):
@@ -275,22 +263,13 @@ class CampaignKanbanView(LoginRequiredMixin, HorillaKanbanView):
     main_url = reverse_lazy("campaigns:campaign_view")
     group_by_field = "status"
 
-    @cached_property
-    def columns(self):
-        """
-        Function to return columns for kanban view
-        """
-        instance = self.model()
-        return [
-            (instance._meta.get_field("campaign_name").verbose_name, "campaign_name"),
-            (instance._meta.get_field("campaign_owner").verbose_name, "campaign_owner"),
-            (instance._meta.get_field("campaign_type").verbose_name, "campaign_type"),
-            (
-                instance._meta.get_field("expected_revenue").verbose_name,
-                "expected_revenue",
-            ),
-            (instance._meta.get_field("budget_cost").verbose_name, "budget_cost"),
-        ]
+    columns = [
+        "campaign_name",
+        "campaign_owner",
+        "campaign_type",
+        "expected_revenue",
+        "budget_cost",
+    ]
 
     @cached_property
     def kanban_attrs(self):

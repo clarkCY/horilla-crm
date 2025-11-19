@@ -101,23 +101,7 @@ class DepartmentListView(LoginRequiredMixin, HorillaListView):
     bulk_update_option = False
     table_height_as_class = "h-[500px]"
 
-    def no_record_add_button(self):
-        if self.request.user.has_perm("horilla_core.add_department"):
-            return {
-                "url": f"""{ reverse_lazy('horilla_core:department_create_form')}?new=true""",
-                "attrs": 'id="department-create"',
-            }
-
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (
-                instance._meta.get_field("department_name").verbose_name,
-                "department_name",
-            ),
-            (instance._meta.get_field("description").verbose_name, "description"),
-        ]
+    columns = ["department_name", "description"]
 
     @cached_property
     def actions(self):

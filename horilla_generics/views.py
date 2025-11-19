@@ -298,6 +298,24 @@ class HorillaListView(ListView):
             self.ordered_ids_key = f"ordered_ids_{self.model.__name__.lower()}"
         self.kwargs = kwargs
 
+        if self.columns:
+            resolved_columns = []
+            instance = self.model()
+            for col in self.columns:
+                if isinstance(col, (tuple, list)) and len(col) >= 2:
+                    resolved_columns.append((str(col[0]), str(col[1])))
+                elif isinstance(col, str):
+                    try:
+                        field = instance._meta.get_field(col)
+                        verbose_name = str(field.verbose_name)
+                        resolved_columns.append((verbose_name, col))
+                    except Exception:
+                        resolved_columns.append((col.replace("_", " ").title(), col))
+                else:
+                    resolved_columns.append((str(col), str(col)))
+
+            self.columns = resolved_columns
+
     def get_default_view_type(self):
         """Return the pinned view_type if available, else 'all'."""
         pinned_view = PinnedView.all_objects.filter(
