@@ -137,23 +137,14 @@ class OpportunityListView(LoginRequiredMixin, HorillaListView):
                 "attrs": 'id="opportunity-create"',
             }
 
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (instance._meta.get_field("name").verbose_name, "name"),
-            (instance._meta.get_field("amount").verbose_name, "amount"),
-            (instance._meta.get_field("close_date").verbose_name, "close_date"),
-            (instance._meta.get_field("stage").verbose_name, "stage"),
-            (
-                instance._meta.get_field("opportunity_type").verbose_name,
-                "get_opportunity_type_display",
-            ),
-            (
-                instance._meta.get_field("primary_campaign_source").verbose_name,
-                "primary_campaign_source__campaign_name",
-            ),
-        ]
+    columns = [
+        "name",
+        "amount",
+        "close_date",
+        "stage",
+        "opportunity_type",
+        "primary_campaign_source",
+    ]
 
     @cached_property
     def actions(self):
@@ -317,19 +308,13 @@ class OpportunityKanbanView(LoginRequiredMixin, HorillaKanbanView):
                     style ="cursor:pointer",
                     """
 
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (instance._meta.get_field("name").verbose_name, "name"),
-            (instance._meta.get_field("amount").verbose_name, "amount"),
-            (instance._meta.get_field("owner").verbose_name, "owner"),
-            (instance._meta.get_field("close_date").verbose_name, "close_date"),
-            (
-                instance._meta.get_field("expected_revenue").verbose_name,
-                "expected_revenue",
-            ),
-        ]
+    columns = [
+        "name",
+        "amount",
+        "owner",
+        "close_date",
+        "expected_revenue",
+    ]
 
 
 @method_decorator(htmx_required, name="dispatch")

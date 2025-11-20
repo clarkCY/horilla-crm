@@ -76,21 +76,12 @@ class OpportunitySplitListView(LoginRequiredMixin, HorillaListView):
     enable_sorting = False
     table_height_as_class = "h-[500px]"
 
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (instance._meta.get_field("split_label").verbose_name, "split_label"),
-            (
-                instance._meta.get_field("split_field").verbose_name,
-                "get_split_field_display",
-            ),
-            (
-                instance._meta.get_field("totals_100_percent").verbose_name,
-                "totals_100_percent",
-            ),
-            (instance._meta.get_field("is_active").verbose_name, "is_active_col"),
-        ]
+    columns = [
+        "split_label",
+        "split_field",
+        "totals_100_percent",
+        (_("Is Active"), "is_active_col"),
+    ]
 
 
 class ToggleOpportunitySplitView(LoginRequiredMixin, View):

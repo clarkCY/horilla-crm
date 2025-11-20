@@ -114,17 +114,14 @@ class UserListView(LoginRequiredMixin, HorillaListView):
         "number_grouping",
     ]
 
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (_("First Name"), "get_avatar_with_name"),
-            (instance._meta.get_field("state").verbose_name, "state"),
-            (instance._meta.get_field("country").verbose_name, "get_country_display"),
-            (instance._meta.get_field("contact_number").verbose_name, "contact_number"),
-            (instance._meta.get_field("department").verbose_name, "department"),
-            (instance._meta.get_field("role").verbose_name, "role"),
-        ]
+    columns = [
+        (_("First Name"), "get_avatar_with_name"),
+        "state",
+        "country",
+        "contact_number",
+        "department",
+        "role",
+    ]
 
     @cached_property
     def actions(self):
@@ -212,17 +209,13 @@ class UserKanbanView(LoginRequiredMixin, HorillaKanbanView):
     group_by_field = "department"
     height_kanban = "h-[550px]"
 
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (_("First Name"), "first_name"),
-            (instance._meta.get_field("role").verbose_name, "role"),
-            (instance._meta.get_field("department").verbose_name, "department"),
-            (instance._meta.get_field("contact_number").verbose_name, "contact_number"),
-            (instance._meta.get_field("state").verbose_name, "state"),
-            (instance._meta.get_field("country").verbose_name, "country"),
-        ]
+    columns = [
+        "first_name",
+        "role" "department",
+        "contact_number",
+        "state",
+        "country",
+    ]
 
     @cached_property
     def actions(self):
@@ -425,13 +418,10 @@ class LoginHistoryListView(LoginRequiredMixin, HorillaListView):
             queryset = queryset.filter(user_id=user_id)
         return queryset
 
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (_("Browser"), "user_agent"),
-            (_("Login Time"), "formatted_datetime"),
-            (_("Is Active"), "is_login_icon"),
-            (_("IP"), "ip"),
-            (_("Status"), "user_status"),
-        ]
+    columns = [
+        (_("Browser"), "user_agent"),
+        (_("Login Time"), "formatted_datetime"),
+        (_("Is Active"), "is_login_icon"),
+        (_("IP"), "ip"),
+        (_("Status"), "user_status"),
+    ]

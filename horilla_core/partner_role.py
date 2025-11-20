@@ -101,23 +101,7 @@ class PartnerRoleListView(LoginRequiredMixin, HorillaListView):
         {"description": {"style": "width: 300px;"}},
     ]
 
-    def no_record_add_button(self):
-        if self.request.user.has_perm("horilla_core.add_partnerrole"):
-            return {
-                "url": f"""{ reverse_lazy('horilla_core:partner_role_create_form')}?new=true""",
-                "attrs": {"id": "partner-role-create"},
-            }
-
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (
-                instance._meta.get_field("partner_role_name").verbose_name,
-                "partner_role_name",
-            ),
-            (instance._meta.get_field("description").verbose_name, "description"),
-        ]
+    columns = ["partner_role_name", "description"]
 
     @cached_property
     def actions(self):

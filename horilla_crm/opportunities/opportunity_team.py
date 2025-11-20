@@ -138,14 +138,7 @@ class OpportunityTeamListView(LoginRequiredMixin, HorillaListView):
             "attrs": 'id="opportunity-team-create"',
         }
 
-    @cached_property
-    def columns(self):
-        """Defines columns for the opportunity team list view."""
-        instance = self.model()
-        return [
-            (instance._meta.get_field("team_name").verbose_name, "team_name"),
-            (instance._meta.get_field("description").verbose_name, "description"),
-        ]
+    columns = ["team_name", "description"]
 
     @cached_property
     def actions(self):
@@ -387,20 +380,7 @@ class OpportunityTeamDetailListView(LoginRequiredMixin, HorillaListView):
                 "opportunities:opportunity_team_detail_view", kwargs={"pk": obj_id}
             )
 
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (instance._meta.get_field("user").verbose_name, "user"),
-            (
-                instance._meta.get_field("team_role").verbose_name,
-                "get_team_role_display",
-            ),
-            (
-                instance._meta.get_field("opportunity_access_level").verbose_name,
-                "get_opportunity_access_level_display",
-            ),
-        ]
+    columns = ["user", "team_role", "opportunity_access_level"]
 
     @cached_property
     def actions(self):

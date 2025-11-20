@@ -85,13 +85,7 @@ class ShortKeyListView(LoginRequiredMixin, HorillaListView):
     table_height_as_class = "h-[500px]"
     list_column_visibility = False
 
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (instance._meta.get_field("page").verbose_name, "get_page_title"),
-            (instance._meta.get_field("key").verbose_name, "custom_key_col"),
-        ]
+    columns = [(_("Page"), "get_page_title"), (_("Key"), "custom_key_col")]
 
     def get_queryset(self):
         queryset = super().get_queryset()

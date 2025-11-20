@@ -137,24 +137,14 @@ class AllActivityListView(LoginRequiredMixin, HorillaListView):
             }
         ]
 
-    @cached_property
-    def columns(self):
-        """
-        Returns a list of tuples defining the column headers and their corresponding field names or display methods for the Activity list view.
-        """
-
-        instance = self.model()
-        return [
-            (instance._meta.get_field("subject").verbose_name, "subject"),
-            (instance._meta.get_field("description").verbose_name, "description"),
-            (
-                instance._meta.get_field("activity_type").verbose_name,
-                "get_activity_type_display",
-            ),
-            (instance._meta.get_field("source").verbose_name, "source"),
-            (_("Related To"), "related_object"),
-            (instance._meta.get_field("status").verbose_name, "get_status_display"),
-        ]
+    columns = [
+        "subject",
+        "description",
+        "activity_type",
+        "source",
+        (_("Related To"), "related_object"),
+        "status",
+    ]
 
     @cached_property
     def actions(self):
@@ -277,18 +267,12 @@ class AcivityKanbanView(LoginRequiredMixin, HorillaKanbanView):
 
         return actions
 
-    @cached_property
-    def columns(self):
-        """
-        Returns a list of tuples defining the column headers and their corresponding field names or display methods for the Activity Kanban view.
-        """
-        instance = self.model()
-        return [
-            (instance._meta.get_field("subject").verbose_name, "subject"),
-            (instance._meta.get_field("activity_type").verbose_name, "activity_type"),
-            (instance._meta.get_field("source").verbose_name, "source"),
-            (_("Related To"), "related_object"),
-        ]
+    columns = [
+        "subject",
+        "activity_type",
+        "source",
+        (_("Related To"), "related_object"),
+    ]
 
 
 @method_decorator(

@@ -19,7 +19,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.db import connection, transaction
-from django.db.models import CharField, ForeignKey
+from django.db.models import CharField, EmailField, ForeignKey, URLField
 from django.forms.models import model_to_dict
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
@@ -138,10 +138,7 @@ class ImportDataView(TemplateView):
                 )
                 if model:
                     models.append(self._format_model_info(model))
-                else:
-                    logger.warning(
-                        f"Model {app_label}.{model_name} not found or not registered for import."
-                    )
+
             else:
                 # Return all registered importable models
                 for model in import_models:
@@ -603,11 +600,19 @@ class ImportStep1View(View):
             for field in model._meta.fields:
                 if field.name in excluded_fields:
                     continue
+
+                if isinstance(field, EmailField):
+                    field_type = "EmailField"
+                elif isinstance(field, URLField):
+                    field_type = "URLField"
+                else:
+                    field_type = field.get_internal_type()
+
                 field_info = {
                     "name": field.name,
                     "verbose_name": field.verbose_name.title(),
                     "required": not field.null and not field.blank,
-                    "field_type": field.get_internal_type(),
+                    "field_type": field_type,
                     "is_choice_field": False,
                     "is_foreign_key": False,
                     "choices": [],
@@ -654,6 +659,7 @@ class ImportStep1View(View):
         """Get sample data from file"""
         full_path = default_storage.path(file_path)
         sample_data = []
+
         if file_path.endswith(".csv"):
             with open(full_path, "r", encoding="utf-8") as file:
                 reader = csv.DictReader(file)
@@ -663,29 +669,36 @@ class ImportStep1View(View):
                     sample_data.append(dict(row))
         else:
             df = pd.read_excel(full_path, nrows=3)
+            # Convert all columns to string to avoid Timestamp serialization issues
+            df = df.astype(str)
             sample_data = df.to_dict("records")
+
         return sample_data
 
     def get_unique_file_values(self, file_path, headers):
         """Extract unique values for each column in the file"""
         full_path = default_storage.path(file_path)
         unique_values = {header: set() for header in headers}
+
         if file_path.endswith(".csv"):
             with open(full_path, "r", encoding="utf-8") as file:
                 reader = csv.DictReader(file)
                 for row in reader:
                     for header in headers:
                         value = str(row.get(header, "")).strip()
-                        if value:
+                        if value and value.lower() != "nan":
                             unique_values[header].add(value)
         else:
             df = pd.read_excel(full_path)
             for header in headers:
                 if header in df.columns:
+                    # Convert entire column to string before processing
+                    str_values = df[header].astype(str).str.strip()
+                    # Filter out NaN and empty strings
                     unique_values[header].update(
-                        df[header].dropna().astype(str).str.strip()
+                        v for v in str_values.tolist() if v and v.lower() != "nan"
                     )
-        # Convert sets to sorted lists
+
         return {
             header: sorted(list(values)) for header, values in unique_values.items()
         }
@@ -758,9 +771,73 @@ class ImportStep2View(View):
             },
         )
 
-    def post(self, request, *args, **kwargs):
-        from django.apps import apps
+    def get_model_fields(self, module_name, app_label):
+        """Get fields from the selected model with choice and foreign key info"""
+        from django.db.models import CharField, EmailField, ForeignKey, URLField
 
+        try:
+            model = apps.get_model(app_label, module_name)
+            fields = []
+            # Define fields to exclude
+            excluded_fields = [
+                "id",
+                "created_at",
+                "updated_at",
+                "is_active",
+                "additional_info",
+                "company",
+                "created_by",
+                "updated_by",
+                "history",
+            ]
+            for field in model._meta.fields:
+                if field.name in excluded_fields:
+                    continue
+
+                # Determine the field type - use actual class for EmailField and URLField
+                if isinstance(field, EmailField):
+                    field_type = "EmailField"
+                elif isinstance(field, URLField):
+                    field_type = "URLField"
+                else:
+                    field_type = field.get_internal_type()
+
+                field_info = {
+                    "name": field.name,
+                    "verbose_name": field.verbose_name.title(),
+                    "required": not field.null and not field.blank,
+                    "field_type": field_type,
+                    "is_choice_field": False,
+                    "is_foreign_key": False,
+                    "choices": [],
+                    "foreign_key_model": None,
+                    "foreign_key_choices": [],
+                }
+                # Handle ChoiceField
+                if isinstance(field, CharField) and field.choices:
+                    field_info["is_choice_field"] = True
+                    field_info["choices"] = [
+                        {"value": value, "label": label}
+                        for value, label in field.choices
+                    ]
+                # Handle ForeignKey
+                elif isinstance(field, ForeignKey):
+                    field_info["is_foreign_key"] = True
+                    field_info["foreign_key_model"] = field.related_model
+                    related_instances = field.related_model.objects.all()
+                    field_info["foreign_key_choices"] = [
+                        {"id": instance.pk, "display": str(instance)}
+                        for instance in related_instances
+                    ]
+                fields.append(field_info)
+            return fields
+        except Exception as e:
+            logger.error(
+                f"Error in get_model_fields (app_label: {app_label}, module: {module_name}): {str(e)}"
+            )
+            return []
+
+    def post(self, request, *args, **kwargs):
         import_data = request.session.get("import_data", {})
         import_config = request.session.get("import_config", {})
         single_import = import_config.get("single_import", False)
@@ -783,7 +860,6 @@ class ImportStep2View(View):
             fk_mappings = {}
             validation_errors = {}
 
-            # Get model fields for validation
             model_fields = self.get_model_fields(module, app_label)
             if not model_fields:
                 return HttpResponse(
@@ -792,11 +868,11 @@ class ImportStep2View(View):
                 """
                 )
 
-            # Get model for field names
             model = apps.get_model(app_label, module)
             model_field_names = [field.name for field in model._meta.fields]
 
-            # Process form data
+            field_lookup = {field["name"]: field for field in model_fields}
+
             for key, value in request.POST.items():
                 if key.startswith("file_header_"):
                     field_name = key.replace("file_header_", "")
@@ -826,49 +902,231 @@ class ImportStep2View(View):
                             target_dict[field_name] = {}
                         target_dict[field_name][slugified_value] = value
 
-            # Validate required fields
+            for field_name, file_header in field_mappings.items():
+                if field_name not in field_lookup:
+                    continue
+
+                field = field_lookup[field_name]
+                file_values = unique_values.get(file_header, [])
+
+                if field_name in replace_values:
+                    continue
+
+                field_type = field["field_type"]
+                if field["is_choice_field"]:
+                    valid_choices = [choice["value"] for choice in field["choices"]]
+                    mapped_values = choice_mappings.get(field_name, {})
+
+                    # Check if all file values have mappings
+                    unmapped_values = []
+                    for file_val in file_values:
+                        if file_val and slugify(file_val) not in mapped_values:
+                            unmapped_values.append(file_val)
+
+                    if unmapped_values:
+                        if field_name not in validation_errors:
+                            validation_errors[field_name] = []
+                        validation_errors[field_name].append(
+                            f"Unmapped choice values: {', '.join(unmapped_values[:3])}{'...' if len(unmapped_values) > 3 else ''}"
+                        )
+
+                    for slug_val, mapped_choice in mapped_values.items():
+                        if mapped_choice not in valid_choices:
+                            if field_name not in validation_errors:
+                                validation_errors[field_name] = []
+                            validation_errors[field_name].append(
+                                f"Invalid choice value: {mapped_choice}"
+                            )
+
+                elif field["is_foreign_key"]:
+                    valid_fk_ids = [fk["id"] for fk in field["foreign_key_choices"]]
+                    mapped_fks = fk_mappings.get(field_name, {})
+
+                    unmapped_values = []
+                    for file_val in file_values:
+                        if file_val and slugify(file_val) not in mapped_fks:
+                            unmapped_values.append(file_val)
+
+                    if unmapped_values:
+                        if field_name not in validation_errors:
+                            validation_errors[field_name] = []
+                        validation_errors[field_name].append(
+                            f"Unmapped foreign key values: {', '.join(unmapped_values[:3])}{'...' if len(unmapped_values) > 3 else ''}"
+                        )
+
+                    # Verify all mapped FKs are valid IDs
+                    for slug_val, mapped_id in mapped_fks.items():
+                        try:
+                            mapped_id_int = int(mapped_id)
+                            if mapped_id_int not in valid_fk_ids:
+                                if field_name not in validation_errors:
+                                    validation_errors[field_name] = []
+                                validation_errors[field_name].append(
+                                    f"Invalid foreign key ID: {mapped_id}"
+                                )
+                        except (ValueError, TypeError):
+                            if field_name not in validation_errors:
+                                validation_errors[field_name] = []
+                            validation_errors[field_name].append(
+                                f"Foreign key must be a valid ID"
+                            )
+
+                elif field_type in ["DateField", "DateTimeField"]:
+                    # Get non-empty sample values from file
+                    sample_values = [
+                        v for v in file_values[:10] if v and str(v).strip()
+                    ]
+                    invalid_dates = []
+
+                    for val in sample_values:
+                        if not self.is_valid_date_format(val):
+                            invalid_dates.append(val)
+
+                    if invalid_dates:
+                        if field_name not in validation_errors:
+                            validation_errors[field_name] = []
+                        validation_errors[field_name].append(
+                            f"Field type mismatch: '{field['verbose_name']}' expects DATE format, but file column '{file_header}' contains invalid date: '{invalid_dates[0]}'"
+                        )
+
+                elif field_type in [
+                    "IntegerField",
+                    "BigIntegerField",
+                    "SmallIntegerField",
+                    "PositiveIntegerField",
+                    "PositiveSmallIntegerField",
+                    "FloatField",
+                    "DecimalField",
+                ]:
+                    sample_values = [
+                        v for v in file_values[:10] if v and str(v).strip()
+                    ]
+                    invalid_numbers = []
+
+                    for val in sample_values:
+                        if not self.is_valid_number(val, field_type):
+                            invalid_numbers.append(val)
+
+                    if invalid_numbers:
+                        if field_name not in validation_errors:
+                            validation_errors[field_name] = []
+                        number_type = (
+                            "INTEGER" if "Integer" in field_type else "DECIMAL"
+                        )
+                        validation_errors[field_name].append(
+                            f"Field type mismatch: '{field['verbose_name']}' expects {number_type} format, but file column '{file_header}' contains invalid number: '{invalid_numbers[0]}'"
+                        )
+
+                elif field_type == "BooleanField":
+                    sample_values = [
+                        v for v in file_values[:10] if v and str(v).strip()
+                    ]
+                    invalid_bools = []
+
+                    for val in sample_values:
+                        if not self.is_valid_boolean(val):
+                            invalid_bools.append(val)
+
+                    if invalid_bools:
+                        if field_name not in validation_errors:
+                            validation_errors[field_name] = []
+                        validation_errors[field_name].append(
+                            f"Field type mismatch: '{field['verbose_name']}' expects BOOLEAN (true/false/yes/no/1/0), but file column '{file_header}' contains like: '{invalid_bools[0]}'"
+                        )
+
+                elif field_type == "EmailField":
+                    sample_values = [
+                        v for v in file_values[:10] if v and str(v).strip()
+                    ]
+                    invalid_emails = []
+
+                    for val in sample_values:
+                        if not self.is_valid_email(val):
+                            invalid_emails.append(val)
+
+                    if invalid_emails:
+                        if field_name not in validation_errors:
+                            validation_errors[field_name] = []
+                        validation_errors[field_name].append(
+                            f"Field type mismatch: '{field['verbose_name']}' expects EMAIL format, but file column '{file_header}' contains invalid email"
+                        )
+
+                elif field_type == "URLField":
+                    sample_values = [
+                        v for v in file_values[:10] if v and str(v).strip()
+                    ]
+                    invalid_urls = []
+
+                    for val in sample_values:
+                        if not self.is_valid_url(val):
+                            invalid_urls.append(val)
+
+                    if invalid_urls:
+                        if field_name not in validation_errors:
+                            validation_errors[field_name] = []
+                        validation_errors[field_name].append(
+                            f"Field type mismatch: '{field['verbose_name']}' expects URL format, but file column '{file_header}' contains invalid URL: '{invalid_urls[0]}'"
+                        )
+
+                elif field_type in ["CharField", "TextField"]:
+                    sample_values = [
+                        v for v in file_values[:10] if v and str(v).strip()
+                    ]
+
+                    date_count = sum(
+                        1 for val in sample_values if self.is_valid_date_format(val)
+                    )
+                    email_count = sum(
+                        1 for val in sample_values if self.is_valid_email(val)
+                    )
+                    number_count = sum(
+                        1
+                        for val in sample_values
+                        if self.is_valid_number(val, "FloatField")
+                    )
+
+                    total_samples = len(sample_values)
+                    if total_samples > 0:
+                        if date_count / total_samples >= 0.8:
+                            if field_name not in validation_errors:
+                                validation_errors[field_name] = []
+                            validation_errors[field_name].append(
+                                f"Error: '{field['verbose_name']}' is a TEXT field, but file column '{file_header}' appears to contain DATES. Consider mapping to a DateField instead."
+                            )
+
+                        # If 80% or more values look like emails
+                        elif email_count / total_samples >= 0.8:
+                            if field_name not in validation_errors:
+                                validation_errors[field_name] = []
+                            validation_errors[field_name].append(
+                                f"Error: '{field['verbose_name']}' is a TEXT field, but file column '{file_header}' appears to contain EMAIL addresses. Consider mapping to an EmailField instead."
+                            )
+
+                        elif number_count / total_samples >= 0.8:
+                            if field_name not in validation_errors:
+                                validation_errors[field_name] = []
+                            validation_errors[field_name].append(
+                                f"Error: '{field['verbose_name']}' is a TEXT field, but file column '{file_header}' appears to contain NUMBERS. Consider mapping to a numeric field instead."
+                            )
+
+            # Validate required fields are mapped
             for field in model_fields:
                 if field["required"]:
                     field_name = field["name"]
 
+                    # Skip if replace value provided
                     if field_name in replace_values:
                         continue
 
                     # Check if field is mapped
                     if field_name not in field_mappings:
-                        validation_errors[field_name] = [
-                            "This required field must be mapped to a file header."
-                        ]
+                        if field_name not in validation_errors:
+                            validation_errors[field_name] = []
+                        validation_errors[field_name].append(
+                            f"Required field '{field['verbose_name']}' must be mapped to a file column."
+                        )
                         continue
 
-                    file_header = field_mappings[field_name]
-
-                    # For choice and foreign key fields, check if all values are mapped
-                    if field["is_choice_field"] or field["is_foreign_key"]:
-                        file_values = unique_values.get(file_header, [])
-                        mappings = (
-                            choice_mappings.get(field_name, {})
-                            if field["is_choice_field"]
-                            else fk_mappings.get(field_name, {})
-                        )
-
-                        # Check if all unique values are mapped
-                        unmapped_values = [
-                            val
-                            for val in file_values
-                            if val and slugify(val) not in mappings
-                        ]
-                        if unmapped_values and field_name not in replace_values:
-                            validation_errors[field_name] = [
-                                "All values must be mapped or a default replace value must be provided."
-                            ]
-                        # Check if replace value is provided when there are empty values
-                        elif "" in file_values and field_name not in replace_values:
-                            validation_errors[field_name] = [
-                                "A default replace value is required for empty values in this field."
-                            ]
-
-            # If there are validation errors, re-render the form
             if validation_errors:
                 return render(
                     request,
@@ -879,7 +1137,7 @@ class ImportStep2View(View):
                         "model_fields": model_fields,
                         "module": module,
                         "app_label": app_label,
-                        "auto_mappings": import_data.get("auto_mappings", {}),
+                        "auto_mappings": field_mappings,
                         "auto_choice_mappings": import_data.get(
                             "auto_choice_mappings", {}
                         ),
@@ -893,7 +1151,6 @@ class ImportStep2View(View):
                     },
                 )
 
-            # Get auto-mappings from session
             auto_choice_mappings = import_data.get("auto_choice_mappings", {})
             auto_fk_mappings = import_data.get("auto_fk_mappings", {})
 
@@ -905,7 +1162,6 @@ class ImportStep2View(View):
                 if field_name not in fk_mappings:
                     fk_mappings[field_name] = auto_mappings.copy()
 
-            # Store mappings in session
             import_data["field_mappings"] = field_mappings
             import_data["replace_values"] = replace_values
             import_data["choice_mappings"] = choice_mappings
@@ -929,64 +1185,54 @@ class ImportStep2View(View):
             logger.error(tb)
             return HttpResponse(
                 f"""
-                <div class="text-red-500 text-sm">Error processing field mappings: {str(e)}</div>
+                <div class="text-red-500 text-sm">Error processing field mappings: {str(e)}")
             """
             )
 
-    def get_model_fields(self, module_name, app_label):
-        """Get fields from the selected model with choice and foreign key info"""
-        from django.apps import apps
-        from django.db.models import CharField, ForeignKey
-
+    def is_valid_date_format(self, value):
+        """Check if value can be parsed as a date"""
         try:
-            model = apps.get_model(app_label, module_name)
-            fields = []
-            excluded_fields = [
-                "id",
-                "created_at",
-                "updated_at",
-                "is_active",
-                "additional_info",
-                "company",
-                "created_by",
-                "updated_by",
-                "history",
-            ]
-            for field in model._meta.fields:
-                if field.name in excluded_fields:
-                    continue
-                field_info = {
-                    "name": field.name,
-                    "verbose_name": field.verbose_name.title(),
-                    "required": not field.null and not field.blank,
-                    "field_type": field.get_internal_type(),
-                    "is_choice_field": False,
-                    "is_foreign_key": False,
-                    "choices": [],
-                    "foreign_key_model": None,
-                    "foreign_key_choices": [],
-                }
-                if isinstance(field, CharField) and field.choices:
-                    field_info["is_choice_field"] = True
-                    field_info["choices"] = [
-                        {"value": value, "label": label}
-                        for value, label in field.choices
-                    ]
-                elif isinstance(field, ForeignKey):
-                    field_info["is_foreign_key"] = True
-                    field_info["foreign_key_model"] = field.related_model
-                    related_instances = field.related_model.objects.all()
-                    field_info["foreign_key_choices"] = [
-                        {"id": instance.pk, "display": str(instance)}
-                        for instance in related_instances
-                    ]
-                fields.append(field_info)
-            return fields
-        except Exception as e:
-            logger.error(
-                f"Error in get_model_fields (app_label: {app_label}, module: {module_name}): {str(e)}"
-            )
-            return []
+            from dateutil import parser
+
+            parser.parse(str(value))
+            return True
+        except:
+            return False
+
+    def is_valid_number(self, value, field_type):
+        """Check if value is a valid number for the field type"""
+        try:
+            val_str = str(value).strip()
+            if not val_str:
+                return False
+            if field_type in ["FloatField", "DecimalField"]:
+                float(val_str)
+            else:
+                int(float(val_str))
+            return True
+        except (ValueError, TypeError):
+            return False
+
+    def is_valid_boolean(self, value):
+        """Check if value is a valid boolean"""
+        val_lower = str(value).lower().strip()
+        return val_lower in ["true", "false", "yes", "no", "1", "0", "t", "f", "y", "n"]
+
+    def is_valid_email(self, value):
+        """Basic email validation"""
+        import re
+
+        val_str = str(value).strip()
+        email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+        return re.match(email_pattern, val_str) is not None
+
+    def is_valid_url(self, value):
+        """Basic URL validation"""
+        import re
+
+        val_str = str(value).strip()
+        url_pattern = r"^https?://[^\s/$.?#].[^\s]*$"
+        return re.match(url_pattern, val_str, re.IGNORECASE) is not None
 
 
 @method_decorator(

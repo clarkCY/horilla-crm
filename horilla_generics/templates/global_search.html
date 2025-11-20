@@ -19,7 +19,7 @@
           {% if total_results > 0  %}
           <div class="flex gap-3">
 
-            <div class="{% if request.GET.section and request.GET.section != 'home' %}w-[865px]{% else %}w-[1100px]{% endif %}">
+            <div class="flex-1">
               <p class="mb-5 text-sm font-medium">{% trans "We searched for" %} "{{ query }}"</p>
 
               <!-- Loading spinner -->

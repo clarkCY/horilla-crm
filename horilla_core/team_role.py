@@ -101,20 +101,7 @@ class TeamRoleListView(LoginRequiredMixin, HorillaListView):
         {"description": {"style": "width: 300px;"}},
     ]
 
-    def no_record_add_button(self):
-        if self.request.user.has_perm("horilla_core.add_teamrole"):
-            return {
-                "url": f"""{ reverse_lazy('horilla_core:team_role_create_form')}?new=true""",
-                "attrs": 'id="team-role-create"',
-            }
-
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (instance._meta.get_field("team_role_name").verbose_name, "team_role_name"),
-            (instance._meta.get_field("description").verbose_name, "description"),
-        ]
+    columns = ["team_role_name", "description"]
 
     @cached_property
     def actions(self):

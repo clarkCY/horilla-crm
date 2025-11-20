@@ -477,15 +477,7 @@ class HolidayListView(LoginRequiredMixin, HorillaListView):
     search_url = reverse_lazy("horilla_core:holiday_list_view")
     store_ordered_ids = True
 
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (instance._meta.get_field("name").verbose_name, "name"),
-            (instance._meta.get_field("start_date").verbose_name, "start_date"),
-            (instance._meta.get_field("end_date").verbose_name, "end_date"),
-            (instance._meta.get_field("is_recurring").verbose_name, "is_recurring"),
-        ]
+    columns = ["name", "start_date", "end_date", "is_recurring"]
 
     @cached_property
     def col_attrs(self):
@@ -810,22 +802,13 @@ class BusinessHourListView(LoginRequiredMixin, HorillaListView):
     search_url = reverse_lazy("horilla_core:business_hour_list_view")
     store_ordered_ids = True
 
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (instance._meta.get_field("name").verbose_name, "name"),
-            (instance._meta.get_field("time_zone").verbose_name, "time_zone"),
-            (
-                instance._meta.get_field("business_hour_type").verbose_name,
-                "get_business_hour_type_display",
-            ),
-            (
-                instance._meta.get_field("week_start_day").verbose_name,
-                "get_week_start_day_display",
-            ),
-            (instance._meta.get_field("is_default").verbose_name, "is_default_hour"),
-        ]
+    columns = [
+        "name",
+        "time_zone",
+        "business_hour_type",
+        "week_start_day",
+        (_("Default Business Hour"), "is_default_hour"),
+    ]
 
     @cached_property
     def col_attrs(self):

@@ -135,21 +135,7 @@ class ContactListView(LoginRequiredMixin, HorillaListView):
         {"email": {"style": "width: 250px;"}, "title": {"style": "width: 250px;"}},
     ]
 
-    @cached_property
-    def columns(self):
-        """Attributes for columns in the contact list"""
-        instance = self.model()
-        return [
-            (instance._meta.get_field("first_name").verbose_name, "first_name"),
-            (instance._meta.get_field("last_name").verbose_name, "last_name"),
-            (instance._meta.get_field("title").verbose_name, "title"),
-            (instance._meta.get_field("email").verbose_name, "email"),
-            (instance._meta.get_field("phone").verbose_name, "phone"),
-            (
-                instance._meta.get_field("contact_source").verbose_name,
-                "get_contact_source_display",
-            ),
-        ]
+    columns = ["first_name", "last_name", "title", "email", "phone", "contact_source"]
 
     @cached_property
     def actions(self):
@@ -268,17 +254,7 @@ class ContactKanbanView(LoginRequiredMixin, HorillaKanbanView):
     main_url = reverse_lazy("contacts:contacts_view")
     group_by_field = "contact_source"
 
-    @cached_property
-    def columns(self):
-        """Attributes for columns in the contact kanban"""
-        instance = self.model()
-        return [
-            (instance._meta.get_field("first_name").verbose_name, "first_name"),
-            (instance._meta.get_field("title").verbose_name, "title"),
-            (instance._meta.get_field("email").verbose_name, "email"),
-            (instance._meta.get_field("phone").verbose_name, "phone"),
-            (instance._meta.get_field("birth_date").verbose_name, "birth_date"),
-        ]
+    columns = ["first_name", "title", "email", "phone", "birth_date"]
 
     @cached_property
     def actions(self):

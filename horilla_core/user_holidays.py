@@ -65,16 +65,13 @@ class UserHolidayListView(LoginRequiredMixin, HorillaListView):
     bulk_select_option = False
     store_ordered_ids = True
 
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (instance._meta.get_field("name").verbose_name, "name"),
-            (instance._meta.get_field("start_date").verbose_name, "start_date"),
-            (instance._meta.get_field("end_date").verbose_name, "end_date"),
-            (instance._meta.get_field("is_recurring").verbose_name, "is_recurring"),
-            (_("Holiday Type"), "holiday_type"),
-        ]
+    columns = [
+        "name",
+        "start_date",
+        "end_date",
+        "is_recurring",
+        (_("Holiday Type"), "holiday_type"),
+    ]
 
     def get_queryset(self):
         user = self.request.user

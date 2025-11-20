@@ -86,13 +86,10 @@ class UserloginHistoryListView(LoginRequiredMixin, HorillaListView):
 
         return queryset
 
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (_("Browser"), "user_agent"),
-            (_("Login Time"), "formatted_datetime"),
-            (_("Is Active"), "is_login_icon"),
-            (_("IP"), "ip"),
-            (_("Status"), "user_status"),
-        ]
+    columns = [
+        (_("Browser"), "user_agent"),
+        (_("Login Time"), "formatted_datetime"),
+        (_("Is Active"), "is_login_icon"),
+        (_("IP"), "ip"),
+        (_("Status"), "user_status"),
+    ]

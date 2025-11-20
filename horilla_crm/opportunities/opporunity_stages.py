@@ -11,6 +11,7 @@ from django.template.loader import render_to_string
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
 from django.utils.safestring import mark_safe
+from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import TemplateView, View
 
@@ -124,19 +125,13 @@ class OpportunityStageListView(LoginRequiredMixin, HorillaListView):
                 "attrs": 'id="opportunity-stage-create"',
             }
 
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (instance._meta.get_field("order").verbose_name, "order"),
-            (instance._meta.get_field("name").verbose_name, "name"),
-            (instance._meta.get_field("is_final").verbose_name, "is_final_col"),
-            (instance._meta.get_field("probability").verbose_name, "probability"),
-            (
-                instance._meta.get_field("stage_type").verbose_name,
-                "get_stage_type_display",
-            ),
-        ]
+    columns = [
+        "order",
+        "name",
+        (_("Is Final Stage"), "is_final_col"),
+        "probability",
+        "stage_type",
+    ]
 
     @cached_property
     def actions(self):
@@ -145,7 +140,7 @@ class OpportunityStageListView(LoginRequiredMixin, HorillaListView):
         if self.request.user.has_perm("opportunities:change_opportunitystage"):
             actions.append(
                 {
-                    "action": "Edit",
+                    "action": _("Edit"),
                     "src": "assets/icons/edit.svg",
                     "img_class": "w-4 h-4",
                     "attrs": """
@@ -159,7 +154,7 @@ class OpportunityStageListView(LoginRequiredMixin, HorillaListView):
         if self.request.user.has_perm("opportunities:delete_opportunitystage"):
             actions.append(
                 {
-                    "action": "Delete",
+                    "action": _("Delete"),
                     "src": "assets/icons/a4.svg",
                     "img_class": "w-4 h-4",
                     "attrs": """
@@ -193,7 +188,6 @@ class ChangeFinalStage(LoginRequiredMixin, View):
             new_final_stage = OpportunityStage.objects.get(id=stage_id)
 
             with transaction.atomic():
-                # First, temporarily set all stages to high order numbers to avoid conflicts
                 company = new_final_stage.company
                 all_stages = list(
                     OpportunityStage.objects.filter(company=company)
@@ -201,30 +195,26 @@ class ChangeFinalStage(LoginRequiredMixin, View):
                     .order_by("order")
                 )
 
-                # Assign temporary high order numbers to avoid constraint violations
                 temp_order_start = 10000
                 for idx, stage in enumerate(all_stages):
                     OpportunityStage.objects.filter(pk=stage.pk).update(
                         order=temp_order_start + idx
                     )
 
-                # Now update the is_final flag
-                # Remove is_final from all other stages
                 OpportunityStage.objects.filter(company=company, is_final=True).exclude(
                     pk=new_final_stage.pk
                 ).update(is_final=False)
 
-                # Set the new final stage
                 new_final_stage.is_final = True
                 new_final_stage.save()
 
-            messages.success(request, "Final stage changed successfully.")
+            messages.success(request, _("Final stage changed successfully."))
             return HttpResponse(
                 "<script>htmx.trigger('#reloadButton','click')</script>"
             )
 
         except OpportunityStage.DoesNotExist:
-            messages.error(request, "Stage not found.")
+            messages.error(request, _("Stage not found."))
             return HttpResponse("<script>$('#reloadButton').click();</script>")
         except Exception as e:
             messages.error(request, f"Error changing final stage: {str(e)}")
@@ -392,7 +382,6 @@ class UpdateOpportunityStageOrderView(LoginRequiredMixin, View):
 
         all_stages = non_final + final
 
-        # Find a safe temporary range above existing orders
         max_existing_order = (
             OpportunityStage.objects.filter(company=company).aggregate(
                 max_order=models.Max("order")
@@ -402,12 +391,10 @@ class UpdateOpportunityStageOrderView(LoginRequiredMixin, View):
         temp_order_start = max_existing_order + 2000
 
         with transaction.atomic():
-            # First pass: set temporary high positive orders
             for i, status in enumerate(all_stages):
                 temp_order = temp_order_start + i
                 OpportunityStage.objects.filter(id=status.id).update(order=temp_order)
 
-            # Second pass: set final sequential orders
             for order, status in enumerate(all_stages, start=1):
                 OpportunityStage.objects.filter(id=status.id).update(order=order)
 
@@ -421,46 +408,61 @@ class LoadOpportunityStagesView(View):
             raise HorillaHttp404(e)
         initialization = request.GET.get("initialization") == "true"
         default_stages = [
-            {"name": "Prospecting", "order": 1, "probability": 10, "is_final": False},
-            {"name": "Qualification", "order": 2, "probability": 20, "is_final": False},
             {
-                "name": "Needs Analysis",
+                "name": _("Prospecting"),
+                "order": 1,
+                "probability": 10,
+                "is_final": False,
+            },
+            {
+                "name": _("Qualification"),
+                "order": 2,
+                "probability": 20,
+                "is_final": False,
+            },
+            {
+                "name": _("Needs Analysis"),
                 "order": 3,
                 "probability": 30,
                 "is_final": False,
             },
             {
-                "name": "Value Proposition",
+                "name": _("Value Proposition"),
                 "order": 4,
                 "probability": 50,
                 "is_final": False,
             },
             {
-                "name": "Id. Decision Makers",
+                "name": _("Id. Decision Makers"),
                 "order": 5,
                 "probability": 60,
                 "is_final": False,
             },
             {
-                "name": "Perception Analysis",
+                "name": _("Perception Analysis"),
                 "order": 6,
                 "probability": 70,
                 "is_final": False,
             },
             {
-                "name": "Proposal/Price Quote",
+                "name": _("Proposal/Price Quote"),
                 "order": 7,
                 "probability": 80,
                 "is_final": False,
             },
             {
-                "name": "Negotiation/Review",
+                "name": _("Negotiation/Review"),
                 "order": 8,
                 "probability": 90,
                 "is_final": False,
             },
-            {"name": "Closed Lost", "order": 9, "probability": 0, "is_final": False},
-            {"name": "Closed Won", "order": 10, "probability": 100, "is_final": True},
+            {"name": _("Closed Lost"), "order": 9, "probability": 0, "is_final": False},
+            {
+                "name": _("Closed Won"),
+                "order": 10,
+                "probability": 100,
+                "is_final": True,
+            },
         ]
 
         all_stages = OpportunityStage.all_objects.values(
@@ -559,46 +561,61 @@ class CustomOppStagesFormView(View):
         ).order_by("company_id", "order")
 
         default_stages = [
-            {"name": "Prospecting", "order": 1, "probability": 10, "is_final": False},
-            {"name": "Qualification", "order": 2, "probability": 20, "is_final": False},
             {
-                "name": "Needs Analysis",
+                "name": _("Prospecting"),
+                "order": 1,
+                "probability": 10,
+                "is_final": False,
+            },
+            {
+                "name": _("Qualification"),
+                "order": 2,
+                "probability": 20,
+                "is_final": False,
+            },
+            {
+                "name": _("Needs Analysis"),
                 "order": 3,
                 "probability": 30,
                 "is_final": False,
             },
             {
-                "name": "Value Proposition",
+                "name": _("Value Proposition"),
                 "order": 4,
                 "probability": 50,
                 "is_final": False,
             },
             {
-                "name": "Id. Decision Makers",
+                "name": _("Id. Decision Makers"),
                 "order": 5,
                 "probability": 60,
                 "is_final": False,
             },
             {
-                "name": "Perception Analysis",
+                "name": _("Perception Analysis"),
                 "order": 6,
                 "probability": 70,
                 "is_final": False,
             },
             {
-                "name": "Proposal/Price Quote",
+                "name": _("Proposal/Price Quote"),
                 "order": 7,
                 "probability": 80,
                 "is_final": False,
             },
             {
-                "name": "Negotiation/Review",
+                "name": _("Negotiation/Review"),
                 "order": 8,
                 "probability": 90,
                 "is_final": False,
             },
-            {"name": "Closed Lost", "order": 9, "probability": 0, "is_final": False},
-            {"name": "Closed Won", "order": 10, "probability": 100, "is_final": True},
+            {"name": _("Closed Lost"), "order": 9, "probability": 0, "is_final": False},
+            {
+                "name": _("Closed Won"),
+                "order": 10,
+                "probability": 100,
+                "is_final": True,
+            },
         ]
 
         unique_stages = {}

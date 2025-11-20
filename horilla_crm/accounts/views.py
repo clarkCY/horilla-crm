@@ -129,24 +129,14 @@ class AccountListView(LoginRequiredMixin, HorillaListView):
             }
         return None
 
-    @cached_property
-    def columns(self):
-        """Return list of account columns as (display name, field name) tuples."""
-        instance = self.model()
-        return [
-            (instance._meta.get_field("name").verbose_name, "name"),
-            (instance._meta.get_field("account_number").verbose_name, "account_number"),
-            (instance._meta.get_field("account_owner").verbose_name, "account_owner"),
-            (
-                instance._meta.get_field("account_type").verbose_name,
-                "get_account_type_display",
-            ),
-            (
-                instance._meta.get_field("account_source").verbose_name,
-                "get_account_source_display",
-            ),
-            (instance._meta.get_field("annual_revenue").verbose_name, "annual_revenue"),
-        ]
+    columns = [
+        "name",
+        "account_number",
+        "account_owner",
+        "account_type",
+        "account_source",
+        "annual_revenue",
+    ]
 
     @cached_property
     def col_attrs(self):
@@ -266,24 +256,14 @@ class AccountsKanbanView(LoginRequiredMixin, HorillaKanbanView):
     main_url = reverse_lazy("accounts:accounts_view")
     group_by_field = "account_type"
 
-    @cached_property
-    def columns(self):
-        """Return list of account columns as (display name, field name) tuples."""
-        instance = self.model()
-        return [
-            (instance._meta.get_field("name").verbose_name, "name"),
-            (instance._meta.get_field("account_number").verbose_name, "account_number"),
-            (instance._meta.get_field("account_owner").verbose_name, "account_owner"),
-            (
-                instance._meta.get_field("account_type").verbose_name,
-                "get_account_type_display",
-            ),
-            (
-                instance._meta.get_field("account_source").verbose_name,
-                "get_account_source_display",
-            ),
-            (instance._meta.get_field("annual_revenue").verbose_name, "annual_revenue"),
-        ]
+    columns = [
+        "name",
+        "account_number",
+        "account_owner",
+        "account_type",
+        "account_source",
+        "annual_revenue",
+    ]
 
     @cached_property
     def actions(self):

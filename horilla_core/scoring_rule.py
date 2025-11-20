@@ -114,22 +114,12 @@ class ScoringRuleListView(LoginRequiredMixin, HorillaListView):
         {"description": {"style": "width: 300px;"}},
     ]
 
-    # def no_record_add_button(self):
-    #     if self.request.user.has_perm("horilla_core.add_scoringrule"):
-    #         return {
-    #             "url": f"""{ reverse_lazy('horilla_core:scoring_rule_create_form')}?new=true""",
-    #             "attrs": 'id="partner-role-create"',
-    #         }
-
-    @cached_property
-    def columns(self):
-        instance = self.model()
-        return [
-            (instance._meta.get_field("name").verbose_name, "name"),
-            (instance._meta.get_field("module").verbose_name, "get_module_display"),
-            (instance._meta.get_field("is_active").verbose_name, "is_active_col"),
-            (instance._meta.get_field("description").verbose_name, "description"),
-        ]
+    columns = [
+        "name",
+        (_("Module"), "get_module_display"),
+        (_("Is Active"), "is_active_col"),
+        "description",
+    ]
 
     @cached_property
     def col_attrs(self):
