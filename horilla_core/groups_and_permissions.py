@@ -131,7 +131,9 @@ class PermissionUtils:
                         and len(permissions) > 0
                     )
                 all_models.append(model_data)
-        return sorted(all_models, key=lambda m: (m["app_label"], m["model_name"]))
+        return sorted(
+            all_models, key=lambda m: (m["is_managed"], m["app_label"], m["model_name"])
+        )
 
 
 @method_decorator(htmx_required, name="dispatch")
