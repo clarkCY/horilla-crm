@@ -58,6 +58,7 @@ function closeDynamicModal() {
     // Fresh selection each time
     const $dynamicCreateModal = $("#dynamicCreateModal");
     const $dynamicCreateModalBox = $("#dynamicCreateModalBox");
+    $dynamicCreateModalBox.html("");
     $dynamicCreateModalBox.removeClass("opacity-100 scale-100")
         .addClass("opacity-0 scale-95");
     setTimeout(() => {
@@ -106,7 +107,7 @@ function closeContentModalSecond() {
     // Fresh selection each time
     const $ContentModalSecond = $("#contentModalSecond");
     const $ContentModalBoxSecond = $("#contentModalBoxSecond");
-
+    $ContentModalBoxSecond.html("");
     $ContentModalBoxSecond.removeClass("opacity-100 scale-100")
         .addClass("opacity-0 scale-95");
     setTimeout(() => {
@@ -134,7 +135,7 @@ function closeDetailModal() {
     // Fresh selection each time
     const $detailModal = $("#detailModal");
     const $detailModalBox = $("#detailModalBox");
-
+    $detailModalBox.html("");
     $detailModalBox.removeClass("opacity-100 scale-100")
         .addClass("opacity-0 scale-95");
     setTimeout(() => {
@@ -219,7 +220,7 @@ function closeFilterModal() {
 
     const $filtermodal = $("#filtermodal");
     const $filtermodalBox = $("#filtermodalBox");
-
+    $filtermodalBox.html("");
     $filtermodalBox.removeClass("opacity-100 scale-100")
         .addClass("opacity-0 scale-95");
     setTimeout(() => {
@@ -244,7 +245,7 @@ function openDeleteModal() {
 function closeDeleteModal() {
     const $deletemodal = $("#deletemodal");
     const $deletemodalBox = $("#deleteBox");
-
+    $deletemodalBox.html("");
     $deletemodalBox.removeClass("opacity-100 scale-100")
         .addClass("opacity-0 scale-95");
     setTimeout(() => {
@@ -275,6 +276,7 @@ function closeDeleteModeModal() {
     //DELETE MODE MODAL
     const $deleteModeModal = $("#deleteModeModal");
     const $deleteModeBox = $("#deleteModeBox");
+    $deleteModeBox.html("");
     $deleteModeBox.removeClass("opacity-100 scale-100")
         .addClass("opacity-0 scale-95");
     setTimeout(() => {
@@ -962,21 +964,6 @@ function closeExport() {
     }, 300);
 }
 
-// function closeModal() {
-//   // Hide the modal
-//   document.getElementById('dbmodal').classList.add('hidden');
-//   document.getElementById('modalBox').classList.add('opacity-0', 'scale-95');
-//   document.getElementById('modalBox').classList.remove('opacity-100', 'scale-100');
-
-//   // Reset the form (assuming the form has an ID, e.g., 'bulkUpdateForm')
-//   const form = document.getElementById('bulkUpdateForm');
-//   if (form) {
-//     form.reset();
-//     form.innerHTML = '';
-//   }
-// }
-
-// Add event handler for form submission
 $("#exportForm").on("submit", function (e) {
     const selectedColumns = $("input[name='export_columns']:checked").map(function () {
         return $(this).val();
@@ -990,13 +977,7 @@ $("#exportForm").on("submit", function (e) {
     }
 });
 
-///end of export functionality
 
-
-
-
-
-// Initialize dropdowns
 $(document).on('htmx:afterSwap', function (event) {
     if (window.Dropdown) {
         $('[data-dropdown-toggle]').each(function () {
@@ -1014,9 +995,6 @@ $(document).on('htmx:afterSwap', function (event) {
     }
 });
 
-//  $(document).on("click", "#clear-select-btn", function () {
-//  clearSelections();
-//  });
 
 $(document).on("click", "[id^='clear-select-btn-']", function () {
     const viewId = getCurrentViewId(this);
@@ -1057,7 +1035,6 @@ function drop(ev) {
 
     target.classList.remove("highlight");
 
-    // Get current query parameters from the URL to preserve filters and search
     const currentQuery = new URLSearchParams(window.location.search);
 
     if (data.startsWith("column-")) {
@@ -1077,7 +1054,6 @@ function drop(ev) {
             const draggedIndex = allColumns.indexOf(draggedColumn);
             const targetIndex = allColumns.indexOf(target);
 
-            // Insert before or after based on drag direction
             if (draggedIndex < targetIndex) {
                 if (target.nextSibling) {
                     parent.insertBefore(draggedColumn, target.nextSibling);
@@ -1099,7 +1075,6 @@ function drop(ev) {
                 (col) => col.dataset.columnKey
             );
 
-            // Include ALL current query parameters in the POST values
             const postValues = {
                 column_order: JSON.stringify(newColumnOrder),
                 app_label: appLabel,
@@ -1109,9 +1084,7 @@ function drop(ev) {
 
             };
 
-            // Append all query parameters
             currentQuery.forEach((value, key) => {
-                // Handle multi-value parameters correctly
                 if (postValues[key]) {
                     if (!Array.isArray(postValues[key])) {
                         postValues[key] = [postValues[key]];
@@ -1132,7 +1105,6 @@ function drop(ev) {
             })
         }
     } else {
-        // Handle item dragging
         const draggedElement = document.getElementById(data);
         if (draggedElement && target) {
             target.querySelector(".items-container").appendChild(draggedElement);
@@ -1146,7 +1118,6 @@ function drop(ev) {
             const csrfToken = kanbanView.dataset.csrfToken;
             const className = kanbanView.dataset.className;
 
-            // Include ALL current query parameters in the POST values
             const postValues = {
                 item_id: itemId,
                 new_column: targetColumn,
@@ -1156,9 +1127,7 @@ function drop(ev) {
 
             };
 
-            // Append all query parameters
             currentQuery.forEach((value, key) => {
-                // Handle multi-value parameters correctly
                 if (postValues[key]) {
                     if (!Array.isArray(postValues[key])) {
                         postValues[key] = [postValues[key]];
@@ -1626,12 +1595,58 @@ $(document).on("htmx:afterSettle", function (e) {
 
 $(document).on('keydown', function (e) {
     if (e.key === "Escape" || e.keyCode === 27) {
-        // Find all visible modals and hide them
-        $('.fixed.inset-0.flex').each(function () {
-            if (!$(this).hasClass('hidden')) {
-                $(this).addClass('hidden'); // Hide modal
-                $(this).find('.opacity-0').removeClass('opacity-100 scale-100').addClass('opacity-0 scale-95'); // Optional: reset animation
-            }
+        var visibleModals = $('.fixed.inset-0.flex').filter(function() {
+            return !$(this).hasClass('hidden');
         });
+
+        if (visibleModals.length > 0) {
+            var topmostModal = visibleModals.last();
+
+            topmostModal.find('.opacity-100, .scale-100').removeClass('opacity-100 scale-100').addClass('opacity-0 scale-95');
+
+            setTimeout(function() {
+                topmostModal.addClass('hidden');
+                topmostModal.find('.modal-box').empty();
+            }, 200);
+        }
     }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('click', function(e) {
+        const wrapper = e.target.closest('.dropdown-wrapper');
+
+        if (wrapper) {
+            const dropdown = wrapper.querySelector('.dropdown-content');
+            const clickedDropdown = e.target.closest('.dropdown-content');
+            if (clickedDropdown) {
+                e.stopPropagation();
+                return;
+            }
+
+            const trigger = Array.from(wrapper.children).find(el =>
+                el !== dropdown && (el.tagName === 'BUTTON' || el.tagName === 'A' || el.querySelector('svg'))
+            );
+
+            if (trigger && trigger.contains(e.target)) {
+                e.stopPropagation();
+
+                document.querySelectorAll('.dropdown-wrapper.active').forEach(other => {
+                    if (other !== wrapper) other.classList.remove('active');
+                });
+
+                wrapper.classList.toggle('active');
+            }
+        } else {
+            document.querySelectorAll('.dropdown-wrapper.active').forEach(wrapper => {
+                wrapper.classList.remove('active');
+            });
+        }
+    });
+    document.body.addEventListener('htmx:afterRequest', function(e) {
+        const wrapper = e.target.closest('.dropdown-wrapper');
+        if (wrapper && wrapper.classList.contains('active')) {
+            wrapper.classList.remove('active');
+        }
+    });
 });
