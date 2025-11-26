@@ -12,10 +12,13 @@
         {{ obj.name }}
         </h3>
         </div>
+        {% has_perm "horilla_core.change_company" as can_change_company %}
         {% if request.active_company %}
-        <button id="profile-edit-btn" hx-get="{% url 'horilla_core:edit_company' obj.pk %}?details=true" hx-on:click="openModal()" hx-target="#modalBox">
-            <img src="{% static '/assets/icons/edit.svg' %}" alt="" width="15" />
-        </button>
+            {% if can_change_company %}
+                <button id="profile-edit-btn" hx-get="{% url 'horilla_core:edit_company' obj.pk %}?details=true" hx-on:click="openModal()" hx-target="#modalBox">
+                    <img src="{% static '/assets/icons/edit.svg' %}" alt="" width="15" />
+                </button>
+            {% endif %}
         {% endif %}
     </div>
     <div class="grid columns-1 lg:grid-cols-2 gap-4">
