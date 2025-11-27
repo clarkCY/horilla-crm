@@ -146,20 +146,6 @@ class Activity(HorillaCoreModel):
 
     OWNER_FIELDS = ["owner", "assigned_to"]
 
-    field_permissions = [
-        "subject",
-        "related_object",
-        "description",
-        "activity_type",
-        "status",
-        "start_datetime",
-        "end_datetime",
-        "due_datetime",
-        "owner",
-        "assigned_to",
-        "participants",
-    ]
-
     class Meta:
         """
         Meta class for Activity model

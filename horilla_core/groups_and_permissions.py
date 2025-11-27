@@ -245,9 +245,14 @@ class ModelFieldsModalView(LoginRequiredMixin, TemplateView):
                     if perm.field_name not in existing_permissions:
                         existing_permissions[perm.field_name] = perm.permission_type
 
-        allowed_fields = getattr(model, "field_permissions", None)
-        if not isinstance(allowed_fields, (list, tuple, set)):
-            allowed_fields = None
+        excluded_fields = getattr(model, "field_permissions_exclude", None)
+        if not isinstance(excluded_fields, (list, tuple, set)):
+            excluded_fields = []
+        else:
+            excluded_fields = set(excluded_fields)
+
+        globally_excluded_fields = {"id", "pk"}
+        excluded_fields.update(globally_excluded_fields)
 
         model_defaults = getattr(model, "default_field_permissions", {})
 
@@ -259,7 +264,7 @@ class ModelFieldsModalView(LoginRequiredMixin, TemplateView):
 
             field_name = field.name
 
-            if allowed_fields is not None and field_name not in allowed_fields:
+            if field_name in excluded_fields:
                 continue
 
             verbose_name = getattr(field, "verbose_name", field_name).title()

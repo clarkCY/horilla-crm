@@ -95,18 +95,6 @@ class Contact(HorillaCoreModel):
     is_primary = models.BooleanField(verbose_name=_("Is Primary"), default=False)
     contact_score = models.IntegerField(default=0, verbose_name=_("Contact Score"))
 
-    field_permissions = [
-        "first_name",
-        "last_name",
-        "email",
-        "phone",
-        "address_city",
-        "address_state",
-        "address_zip",
-        "address_country",
-        "contact_owner",
-    ]
-
     OWNER_FIELDS = ["contact_owner"]
 
     class Meta:
@@ -256,12 +244,6 @@ class ContactAccountRelationship(HorillaCoreModel):
         blank=True,
         verbose_name=_("Role"),
     )
-
-    field_permissions = [
-        "contact",
-        "account",
-        "role",
-    ]
 
     class Meta:
         """Ensure unique contact–account pairs and define verbose names."""

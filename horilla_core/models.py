@@ -395,11 +395,45 @@ class HorillaCoreModel(models.Model):
     objects = CompanyFilteredManager()
     all_objects = models.Manager()
 
+    field_permissions_exclude = [
+        "is_active",
+        "additional_info",
+        "company",
+        "created_at",
+        "updated_at",
+        "created_by",
+        "updated_by",
+    ]
+
     class Meta:
         """
         Meta options for the HorillaCoreModel."""
 
         abstract = True
+
+    def save(self, *args, **kwargs):
+        """
+        Override save to automatically set created_by, updated_by, created_at,
+        updated_at, and company fields.
+        """
+        request = getattr(_thread_local, "request", None)
+        if request:
+            user = getattr(request, "user", None)
+            company = getattr(request, "active_company", None)
+        now = timezone.now()
+        if not self.pk:
+            if user:
+                self.created_by = user
+                self.updated_by = user
+            self.created_at = now
+            self.updated_at = now
+            if company:
+                self.company = company
+        else:
+            if user:
+                self.updated_by = user
+            self.updated_at = now
+        super().save(*args, **kwargs)
 
     @property
     def histories(self):
