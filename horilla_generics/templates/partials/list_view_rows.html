@@ -2,16 +2,7 @@
 {% load i18n %}
 {% load horilla_tags %}
 {% for data in queryset %}
-    <tr
-        {% if forloop.last and has_next %}
-            class="htmx-sentinel"
-            hx-get="{{search_url}}?{{ search_params }}&page={{ next_page }}"
-            hx-trigger="intersect once"
-            hx-select="#data-container-{{view_id}} tr"
-            hx-swap="beforeend"
-            hx-target="#data-container-{{view_id}}"
-            hx-indicator="#loadingIndicator"
-        {% endif %}>
+    <tr>
         {% if bulk_select_option %}
             <td class="sticky left-0 bg-white z-40 text-sm border-[1px] border-[solid] border-[#efefef] text-left p-3">
                 <div class="flex items-center justify-center">
@@ -116,6 +107,18 @@
         {% endif %}
     </tr>
 {% endfor %}
+{% if has_next %}
+    <tr class="htmx-sentinel" style="height: 1px;">
+        <td colspan="100" style="padding: 0; height: 1px;"
+            hx-get="{{search_url}}?{{ search_params }}&page={{ next_page }}"
+            hx-trigger="intersect once"
+            hx-select="#data-container-{{view_id}} tr"
+            hx-swap="beforeend"
+            hx-target="#data-container-{{view_id}}"
+            hx-indicator="#loadingIndicator">
+        </td>
+    </tr>
+{% endif %}
 <script>
     $(document).ready(function () {
        const $tableBody = $('[id^="data-container"]');
