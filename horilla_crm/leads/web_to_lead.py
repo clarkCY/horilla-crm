@@ -73,6 +73,7 @@ class LeadFormBuilderView(LoginRequiredMixin, TemplateView):
         return context
 
 
+@method_decorator(htmx_required, name="dispatch")
 @method_decorator(
     permission_required_or_denied("leads.add_leadcaptureform"), name="dispatch"
 )
@@ -96,6 +97,7 @@ class UpdateFormHeadingView(LoginRequiredMixin, TemplateView):
         return render(request, self.template_name, context)
 
 
+@method_decorator(htmx_required, name="dispatch")
 @method_decorator(
     permission_required_or_denied("leads.add_leadcaptureform"), name="dispatch"
 )
@@ -364,6 +366,7 @@ class SaveLeadFormView(LoginRequiredMixin, FormView):
         return super().form_invalid(form)
 
 
+@method_decorator(htmx_required, name="dispatch")
 @method_decorator(
     permission_required_or_denied("leads.add_leadcaptureform"), name="dispatch"
 )
