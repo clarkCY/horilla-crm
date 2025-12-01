@@ -1,4 +1,13 @@
 from django import template
+from django.db.models import (
+    BigIntegerField,
+    DecimalField,
+    FloatField,
+    IntegerField,
+    PositiveIntegerField,
+    PositiveSmallIntegerField,
+    SmallIntegerField,
+)
 from django.template.defaultfilters import floatformat
 
 register = template.Library()
@@ -470,3 +479,35 @@ def get_display_text(composite_key):
     if "||" in str(composite_key):
         return str(composite_key).split("||")[0]
     return str(composite_key)
+
+
+@register.filter
+def is_aggregatable(field_name, model_class):
+    """
+    Check if a field can be aggregated (is numeric).
+    Usage: {% if field.name|is_aggregatable:report.model_class %}
+    """
+    try:
+        field = model_class._meta.get_field(field_name)
+
+        # Check if field is numeric and not a primary key
+        if (
+            isinstance(
+                field,
+                (
+                    IntegerField,
+                    FloatField,
+                    DecimalField,
+                    PositiveIntegerField,
+                    PositiveSmallIntegerField,
+                    BigIntegerField,
+                    SmallIntegerField,
+                ),
+            )
+            and not field.primary_key
+        ):
+            return True
+
+        return False
+    except:
+        return False

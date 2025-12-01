@@ -33,17 +33,19 @@
       {% endwith %}
       {% endwith %}
       {% endwith %}
-      <button
-        class="font-bold px-1.5 py-1 {% if report.aggregate_columns_dict.field == field.name %}text-primary-600{% else %}text-[#979797]{% endif %}"
-        hx-post="{% url 'horilla_reports:toggle_aggregate' report.pk %}"
-        hx-vals='{"field_name": "{{ field.name }}"}'
-        hx-target="#report-content"
-        hx-select="#report-content"
-        hx-select-oob="#nav-actions"
-        hx-swap="outerHTML"
-        hx-headers='{"HX-Trigger": "refreshReport"}'>
-        {% trans "A" %}
-      </button>
+      {% if field.name|is_aggregatable:report.model_class %}
+        <button
+          class="font-bold px-1.5 py-1 {% if report.aggregate_columns_dict.field == field.name %}text-primary-600{% else %}text-[#979797]{% endif %}"
+          hx-post="{% url 'horilla_reports:toggle_aggregate' report.pk %}"
+          hx-vals='{"field_name": "{{ field.name }}"}'
+          hx-target="#report-content"
+          hx-select="#report-content"
+          hx-select-oob="#nav-actions"
+          hx-swap="outerHTML"
+          hx-headers='{"HX-Trigger": "refreshReport"}'>
+          {% trans "A" %}
+        </button>
+      {% endif %}
     </div>
   </div>
 {% empty %}
