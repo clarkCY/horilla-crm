@@ -111,7 +111,7 @@ class RoleUsersListView(LoginRequiredMixin, HorillaListView):
     filterset_class = UserFilter
     table_width = False
     view_id = "user-roles"
-
+    filter_url_push = False
     search_url = reverse_lazy("horilla_core:view_user_in_role_list_view")
     main_url = reverse_lazy("horilla_core:view_user_in_role")
     bulk_delete_enabled = False
@@ -251,7 +251,7 @@ class DeleteUserFromRole(LoginRequiredMixin, View):
 
 @method_decorator(htmx_required, name="dispatch")
 @method_decorator(
-    permission_required_or_denied("horilla_core:delete_role", modal=True),
+    permission_required_or_denied("horilla_core.delete_role", modal=True),
     name="dispatch",
 )
 class RoleDeleteView(LoginRequiredMixin, HorillaSingleDeleteView):

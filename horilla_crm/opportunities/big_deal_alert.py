@@ -39,7 +39,7 @@ class BigDealAlertView(LoginRequiredMixin, HorillaView):
 
 @method_decorator(htmx_required, name="dispatch")
 @method_decorator(
-    permission_required("opportunities.view_bigdealalert"), name="dispatch"
+    permission_required_or_denied("opportunities.view_bigdealalert"), name="dispatch"
 )
 class BigDealAlertNavbar(LoginRequiredMixin, HorillaNavView):
     """
@@ -164,7 +164,8 @@ class BigDealAlertFormView(LoginRequiredMixin, HorillaSingleFormView):
 
 @method_decorator(htmx_required, name="dispatch")
 @method_decorator(
-    permission_required_or_denied("opportunities.delete_bigdealalert"), name="dispatch"
+    permission_required_or_denied("opportunities.delete_bigdealalert", modal=True),
+    name="dispatch",
 )
 class BigDealAlertDelete(LoginRequiredMixin, HorillaSingleDeleteView):
     """

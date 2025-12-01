@@ -210,27 +210,45 @@ class AccountListView(LoginRequiredMixin, HorillaListView):
                     },
                 ]
             )
-            if self.request.user.has_perm("accounts.delete_account"):
-                actions.append(
-                    {
-                        "action": "Delete",
-                        "src": "assets/icons/a4.svg",
-                        "img_class": "w-4 h-4",
-                        "attrs": """
-                                hx-post="{get_delete_url}"
-                                hx-target="#deleteModeBox"
-                                hx-swap="innerHTML"
-                                hx-trigger="click"
-                                hx-vals='{{"check_dependencies": "true"}}'
-                                onclick="openDeleteModeModal()"
-                            """,
-                    }
-                )
+        if self.request.user.has_perm("accounts.delete_account"):
+            actions.append(
+                {
+                    "action": "Delete",
+                    "src": "assets/icons/a4.svg",
+                    "img_class": "w-4 h-4",
+                    "attrs": """
+                            hx-post="{get_delete_url}"
+                            hx-target="#deleteModeBox"
+                            hx-swap="innerHTML"
+                            hx-trigger="click"
+                            hx-vals='{{"check_dependencies": "true"}}'
+                            onclick="openDeleteModeModal()"
+                        """,
+                }
+            )
+        if self.request.user.has_perm("accounts.add_account"):
+            actions.append(
+                {
+                    "action": _("Duplicate"),
+                    "src": "assets/icons/duplicate.svg",
+                    "img_class": "w-4 h-4",
+                    "attrs": """
+                              hx-get="{get_duplicate_url}?duplicate=true"
+                              hx-target="#modalBox"
+                              hx-swap="innerHTML"
+                              onclick="openModal()"
+                             """,
+                },
+            )
+
         return actions
 
 
 @method_decorator(htmx_required, name="dispatch")
-@method_decorator(permission_required("accounts.delete_account"), name="dispatch")
+@method_decorator(
+    permission_required_or_denied("accounts.delete_account", modal=True),
+    name="dispatch",
+)
 class AccountDeleteView(LoginRequiredMixin, HorillaSingleDeleteView):
     """
     Delete view for account
@@ -292,6 +310,17 @@ class AccountsKanbanView(LoginRequiredMixin, HorillaKanbanView):
                               hx-swap="innerHTML"
                               onclick="openModal()"
                              """,
+                    },
+                    {
+                        "action": _("Change Owner"),
+                        "src": "assets/icons/a2.svg",
+                        "img_class": "w-4 h-4",
+                        "attrs": """
+                            hx-get="{get_change_owner_url}"
+                            hx-target="#modalBox"
+                            hx-swap="innerHTML"
+                            onclick="openModal()"
+                            """,
                     },
                     {
                         "action": _("Change Owner"),
@@ -1294,7 +1323,10 @@ class ChildAccountDeleteView(LoginRequiredMixin, View):
 
 @method_decorator(htmx_required, name="dispatch")
 @method_decorator(
-    permission_required("accounts.delete_partneraccountrelationship"), name="dispatch"
+    permission_required_or_denied(
+        "accounts.delete_partneraccountrelationship", modal=True
+    ),
+    name="dispatch",
 )
 class PartnerAccountDeleteView(LoginRequiredMixin, HorillaSingleDeleteView):
     """

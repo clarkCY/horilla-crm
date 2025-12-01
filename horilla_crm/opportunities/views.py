@@ -205,7 +205,8 @@ class OpportunityListView(LoginRequiredMixin, HorillaListView):
 
 @method_decorator(htmx_required, name="dispatch")
 @method_decorator(
-    permission_required_or_denied("opportunities.delete_opportunity"), name="dispatch"
+    permission_required_or_denied("opportunities.delete_opportunity", modal=True),
+    name="dispatch",
 )
 class OpportunityDeleteView(LoginRequiredMixin, HorillaSingleDeleteView):
     model = Opportunity
@@ -999,7 +1000,8 @@ class OpportunityContactRoleFormview(LoginRequiredMixin, HorillaSingleFormView):
 
 @method_decorator(htmx_required, name="dispatch")
 @method_decorator(
-    permission_required("accounts.delete_opportunitycontactrole"), name="dispatch"
+    permission_required_or_denied("accounts.delete_opportunitycontactrole", modal=True),
+    name="dispatch",
 )
 class OpportunityContactRoleDeleteView(LoginRequiredMixin, HorillaSingleDeleteView):
     """
