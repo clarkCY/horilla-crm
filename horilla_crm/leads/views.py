@@ -472,7 +472,7 @@ class LeadFormView(LoginRequiredMixin, HorillaMultiStepFormView):
     dynamic_create_fields = ["lead_status"]
     dynamic_create_field_mapping = {
         "lead_status": {
-            "fields": ["name", "order", "color", "probability"],
+            "fields": ["name", "order", "color"],
             "full_width_fields": ["name"],
         },
     }
@@ -953,10 +953,10 @@ class LeadConversionView(LoginRequiredMixin, FormView):
     def dispatch(self, request, *args, **kwargs):
         try:
             self.lead = Lead.objects.get(pk=self.kwargs["pk"])
-        except Lead.DoesNotExist:
-            messages.error(self.request, "Lead not found.")
+        except Exception as e:
+            messages.error(self.request, str(e))
             return HttpResponse(
-                "<script>$('#reloadButton').click();closeModal();</script>"
+                "<script>$('#reloadButton').click();closeContentModal();</script>"
             )
         return super().dispatch(request, *args, **kwargs)
 

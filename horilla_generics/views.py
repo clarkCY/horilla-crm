@@ -43,6 +43,7 @@ from django.urls import resolve, reverse, reverse_lazy
 from django.utils import timezone, translation
 from django.utils.dateparse import parse_date, parse_datetime
 from django.utils.decorators import method_decorator
+from django.utils.html import escapejs
 from django.utils.translation import gettext_lazy as _
 from django.views.generic import (
     DeleteView,
@@ -4936,6 +4937,47 @@ class HorillaMultiStepFormView(FormView):
 
     single_step_url_name = None
 
+    def get_filtered_dynamic_create_fields(self):
+        """Filter dynamic_create_fields based on user's add permissions"""
+        if not self.dynamic_create_fields:
+            return []
+
+        filtered_fields = []
+        for field_name in self.dynamic_create_fields:
+            try:
+                field = self.model._meta.get_field(field_name)
+                if isinstance(field, (models.ForeignKey, models.ManyToManyField)):
+                    related_model = field.related_model
+                    app_label = related_model._meta.app_label
+                    model_name = related_model._meta.model_name
+
+                    # Check if custom permission(s) specified in mapping
+                    custom_perms = None
+                    if (
+                        hasattr(self, "dynamic_create_field_mapping")
+                        and field_name in self.dynamic_create_field_mapping
+                    ):
+                        field_config = self.dynamic_create_field_mapping[field_name]
+                        custom_perms = field_config.get("permission")
+
+                    # Normalize to list
+                    if custom_perms:
+                        if isinstance(custom_perms, str):
+                            permissions = [custom_perms]
+                        else:
+                            permissions = custom_perms
+                    else:
+                        # Use default add permission
+                        permissions = [f"{app_label}.add_{model_name}"]
+
+                    # Check if user has ANY of the specified permissions
+                    if any(self.request.user.has_perm(perm) for perm in permissions):
+                        filtered_fields.append(field_name)
+            except:
+                pass
+
+        return filtered_fields
+
     def get_single_step_url(self):
         """Get the URL for single-step form"""
         if not self.single_step_url_name:
@@ -5142,7 +5184,7 @@ class HorillaMultiStepFormView(FormView):
         step = getattr(self, "current_step", self.get_initial_step())
         kwargs["step"] = step
         kwargs["full_width_fields"] = self.fullwidth_fields
-        kwargs["dynamic_create_fields"] = self.dynamic_create_fields
+        kwargs["dynamic_create_fields"] = self.get_filtered_dynamic_create_fields()
 
         if self.object:
             kwargs["instance"] = self.object
@@ -5298,7 +5340,7 @@ class HorillaMultiStepFormView(FormView):
         context["object"] = self.object
         context["is_edit"] = bool(self.object)
         context["full_width_fields"] = self.fullwidth_fields
-        context["dynamic_create_fields"] = self.dynamic_create_fields
+        context["dynamic_create_fields"] = self.get_filtered_dynamic_create_fields()
         context["dynamic_create_field_mapping"] = self.dynamic_create_field_mapping
 
         if self.form_url_name:
@@ -5312,16 +5354,29 @@ class HorillaMultiStepFormView(FormView):
             context["form_url"] = self.request.path
 
         related_models_info = {}
-        if self.dynamic_create_fields:
-            for field_name in self.dynamic_create_fields:
+        filtered_fields = self.get_filtered_dynamic_create_fields()
+        if filtered_fields:
+            for field_name in filtered_fields:
                 try:
                     field = self.model._meta.get_field(field_name)
                     if isinstance(field, (models.ForeignKey, models.ManyToManyField)):
                         related_model = field.related_model
+                        field_config = self.dynamic_create_field_mapping.get(
+                            field_name, {}
+                        )
+
+                        permission = field_config.get("permission")
+                        permission_str = None
+                        if permission:
+                            if isinstance(permission, list):
+                                permission_str = ",".join(permission)
+                            else:
+                                permission_str = permission
                         related_models_info[field_name] = {
                             "model_name": related_model._meta.model_name,
                             "app_label": related_model._meta.app_label,
                             "verbose_name": related_model._meta.verbose_name.title(),
+                            "permission": permission_str,
                         }
                 except:
                     pass
@@ -5625,6 +5680,47 @@ class HorillaSingleFormView(FormView):
     multi_step_url_name = None
     duplicate_mode = False
 
+    def get_filtered_dynamic_create_fields(self):
+        """Filter dynamic_create_fields based on user's add permissions"""
+        if not self.dynamic_create_fields:
+            return []
+
+        filtered_fields = []
+        for field_name in self.dynamic_create_fields:
+            try:
+                field = self.model._meta.get_field(field_name)
+                if isinstance(field, (models.ForeignKey, models.ManyToManyField)):
+                    related_model = field.related_model
+                    app_label = related_model._meta.app_label
+                    model_name = related_model._meta.model_name
+
+                    # Check if custom permission(s) specified in mapping
+                    custom_perms = None
+                    if (
+                        hasattr(self, "dynamic_create_field_mapping")
+                        and field_name in self.dynamic_create_field_mapping
+                    ):
+                        field_config = self.dynamic_create_field_mapping[field_name]
+                        custom_perms = field_config.get("permission")
+
+                    # Normalize to list
+                    if custom_perms:
+                        if isinstance(custom_perms, str):
+                            permissions = [custom_perms]
+                        else:
+                            permissions = custom_perms
+                    else:
+                        # Use default add permission
+                        permissions = [f"{app_label}.add_{model_name}"]
+
+                    # Check if user has ANY of the specified permissions
+                    if any(self.request.user.has_perm(perm) for perm in permissions):
+                        filtered_fields.append(field_name)
+            except:
+                pass
+
+        return filtered_fields
+
     def get_multi_step_url(self):
         """Get the URL for multi-step form"""
         if not self.multi_step_url_name:
@@ -5889,7 +5985,7 @@ class HorillaSingleFormView(FormView):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["full_width_fields"] = self.full_width_fields or []
-        kwargs["dynamic_create_fields"] = self.dynamic_create_fields or []
+        kwargs["dynamic_create_fields"] = self.get_filtered_dynamic_create_fields()
         kwargs["condition_fields"] = self.condition_fields or []
         kwargs["condition_model"] = self.condition_model
         kwargs["condition_field_choices"] = self.condition_field_choices or {}
@@ -5939,7 +6035,7 @@ class HorillaSingleFormView(FormView):
         context["add_condition_url"] = (
             self.get_add_condition_url() if self.condition_fields else None
         )
-        context["dynamic_create_fields"] = self.dynamic_create_fields or []
+        context["dynamic_create_fields"] = self.get_filtered_dynamic_create_fields()
         context["dynamic_create_field_mapping"] = getattr(
             self, "dynamic_create_field_mapping", {}
         )
@@ -5969,16 +6065,29 @@ class HorillaSingleFormView(FormView):
             )
 
         related_models_info = {}
-        if self.dynamic_create_fields:
-            for field_name in self.dynamic_create_fields:
+        filtered_fields = self.get_filtered_dynamic_create_fields()
+        if filtered_fields:
+            for field_name in filtered_fields:
                 try:
                     field = self.model._meta.get_field(field_name)
                     if isinstance(field, (models.ForeignKey, models.ManyToManyField)):
                         related_model = field.related_model
+                        field_config = self.dynamic_create_field_mapping.get(
+                            field_name, {}
+                        )
+                        permission = field_config.get("permission")
+                        permission_str = None
+                        if permission:
+                            if isinstance(permission, list):
+                                permission_str = ",".join(permission)
+                            else:
+                                permission_str = permission
+
                         related_models_info[field_name] = {
                             "model_name": related_model._meta.model_name,
                             "app_label": related_model._meta.app_label,
                             "verbose_name": related_model._meta.verbose_name.title(),
+                            "permission": permission_str,  # Add this line
                         }
                 except:
                     pass
@@ -6069,6 +6178,15 @@ class HorillaDynamicCreateView(LoginRequiredMixin, FormView):
     target_model = None
     field_names = None
 
+    def get_permission_from_mapping(self):
+        """Get custom permission from dynamic_create_field_mapping if provided"""
+        permission_param = self.request.GET.get("permission")
+
+        if permission_param:
+            return [p.strip() for p in permission_param.split(",") if p.strip()]
+
+        return None
+
     def get_model_and_fields(self):
         app_label = self.kwargs.get("app_label")
         model_name = self.kwargs.get("model_name")
@@ -6095,6 +6213,19 @@ class HorillaDynamicCreateView(LoginRequiredMixin, FormView):
             return HttpResponse(
                 "<script>$('#reloadMessagesButton').click();closeDynamicModal();</script>"
             )
+
+        custom_perms = self.get_permission_from_mapping()
+        print(custom_perms, 11111111111111111111111111111)
+
+        if custom_perms:
+            permissions = custom_perms
+        else:
+            app_label = self.target_model._meta.app_label
+            model_name = self.target_model._meta.model_name
+            permissions = [f"{app_label}.add_{model_name}"]
+
+        if not any(request.user.has_perm(perm) for perm in permissions):
+            return render(request, "error/403.html", {"modal": True})
 
         return super().dispatch(request, *args, **kwargs)
 
@@ -6127,9 +6258,8 @@ class HorillaDynamicCreateView(LoginRequiredMixin, FormView):
         full_width_param = self.request.GET.get("full_width_fields", "")
         full_width_fields = []
         if full_width_param and full_width_param.lower() not in ["none", ""]:
-            full_width_fields = [
-                f.strip() for f in full_width_param.split(",") if f.strip()
-            ]
+            clean_param = full_width_param.split("?")[0]  # Remove anything after ?
+            full_width_fields = [f.strip() for f in clean_param.split(",") if f.strip()]
         return full_width_fields
 
     def get_context_data(self, **kwargs):
@@ -6139,9 +6269,20 @@ class HorillaDynamicCreateView(LoginRequiredMixin, FormView):
                 f"Create {self.target_model._meta.verbose_name.title()}"
             )
             context["target_field"] = self.request.GET.get("target_field")
-            context["form_url"] = self.request.path
+            query_string = self.request.GET.urlencode()
+            context["form_url"] = (
+                f"{self.request.path}?{query_string}"
+                if query_string
+                else self.request.path
+            )
             context["full_width_fields"] = self.get_full_width_fields()
         return context
+
+    def get_form_kwargs(self):
+        """Pass full_width_fields to the form"""
+        kwargs = super().get_form_kwargs()
+        kwargs["full_width_fields"] = self.get_full_width_fields()
+        return kwargs
 
     def form_valid(self, form):
         if not self.request.user.is_authenticated:
@@ -6155,17 +6296,20 @@ class HorillaDynamicCreateView(LoginRequiredMixin, FormView):
         instance.updated_at = timezone.now()
         instance.created_by = self.request.user
         instance.updated_by = self.request.user
+        instance.company = self.request.active_company
         instance.save()
         form.save_m2m()
 
         target_field = self.request.GET.get("target_field")
+
+        instance_str = escapejs(str(instance))  # Escape for JavaScript
 
         return HttpResponse(
             f"""
                 <script>
                     var targetSelect = document.querySelector('select[name="{target_field}"]');
                     if (targetSelect) {{
-                        var newOption = new Option('{instance}', '{instance.pk}', true, true);
+                        var newOption = new Option('{instance_str}', '{instance.pk}', true, true);
                         targetSelect.add(newOption);
 
                         // Trigger change event if using Select2
