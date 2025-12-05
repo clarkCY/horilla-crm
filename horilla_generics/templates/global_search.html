@@ -19,7 +19,7 @@
           {% if total_results > 0  %}
           <div class="flex gap-3">
 
-            <div class="flex-1">
+            <div class="flex-1 min-w-0">
               <p class="mb-5 text-sm font-medium">{% trans "We searched for" %} "{{ query }}"</p>
 
               <!-- Loading spinner -->
@@ -34,7 +34,7 @@
               </div>
             </div>
 
-            <div class="w-[250px]  overflow-hidden overflow-x-auto">
+            <div class="w-[250px] overflow-hidden overflow-x-auto">
               <div class="bg-[#25c32417] border border-[#25c32429] text-[#21b320] font-medium text-sm px-3 py-1.5 flex gap-4 items-center justify-center rounded-md mb-2">
                 <span>
                   Search : {{ query }}

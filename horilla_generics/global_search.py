@@ -118,24 +118,11 @@ class GlobalSearchView(LoginRequiredMixin, View):
 
             summary_fields = search_fields[:3]
 
-            status_field = None
-            for field in model._meta.fields:
-                if field.name.lower() in [
-                    "status",
-                    "state",
-                    "lead_status",
-                    "campaign_status",
-                ]:
-                    status_field = field.name
-                    break
-
             model_config[model_name] = {
                 "app_name": app_label,
                 "search_fields": search_fields,
                 "display_field": display_field,
                 "summary_fields": summary_fields,
-                "status_field": status_field,
-                "status_colors": self.default_status_colors if status_field else {},
                 "icons": self.default_icons,
                 "max_results": self.default_max_results,
                 "model": model,
@@ -298,16 +285,6 @@ class GlobalSearchView(LoginRequiredMixin, View):
                     summary_parts.append(highlight_text(value))
 
             item.summary = " • ".join(str(part) for part in summary_parts if part)
-            item.status = (
-                getattr(item, config["status_field"], None)
-                if config["status_field"]
-                else None
-            )
-            item.status_color = (
-                config["status_colors"].get(item.status, "gray")
-                if item.status
-                else None
-            )
 
         list_view = HorillaListView()
         list_view.request = request
@@ -318,7 +295,7 @@ class GlobalSearchView(LoginRequiredMixin, View):
         list_view.paginate_by = 100
         list_view.object_list = results
         list_view.table_height = False
-        list_view.table_height_as_class = "h-[650px]"
+        list_view.table_height_as_class = "h-[calc(_100vh_-_160px_)]"
         list_view.bulk_select_option = False
         list_view.clear_session_button_enabled = False
         list_view.table_width = False
@@ -349,8 +326,6 @@ class GlobalSearchView(LoginRequiredMixin, View):
                 "search_params": query_params.urlencode(),
                 "model_name": model_name,
                 "icons": config["icons"],
-                "status_colors": config["status_colors"],
-                "status_field": config["status_field"],
                 "view_id": f"global-search-{model_name.lower()}",
             }
         )
