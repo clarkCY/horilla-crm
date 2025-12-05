@@ -102,7 +102,7 @@ class ReportNavbar(LoginRequiredMixin, HorillaNavView):
 
     @cached_property
     def actions(self):
-        """Actions for lead"""
+        """Actions for reports"""
         if self.request.user.has_perm("horilla_reports.view_report"):
             return [
                 {
@@ -4136,26 +4136,11 @@ class ReportFolderDetailView(LoginRequiredMixin, HorillaListView):
             )
             current_folder = current_folder.parent
 
-        # Reverse parent breadcrumbs to correct order
         folder_chain.reverse()
 
-        # Combine base + folder chain
         breadcrumbs.extend(folder_chain)
 
         context["breadcrumbs"] = breadcrumbs
-        # current_folder = ReportFolder.objects.filter(id=folder_id).first()
-        # while current_folder:
-        #     breadcrumbs.append(
-        #         {
-        #             "name": current_folder.name,
-        #             "url": f"{reverse('horilla_reports:report_folder_detail', kwargs={'pk': current_folder.id})}?{query_string}",
-        #             "active": current_folder.id == folder_id,
-        #         }
-        #     )
-        #     current_folder = current_folder.parent
-
-        # breadcrumbs.reverse()
-        # context["breadcrumbs"] = breadcrumbs
         return context
 
 
@@ -4234,7 +4219,7 @@ class FolderDeleteView(LoginRequiredMixin, HorillaSingleDeleteView):
 )
 class ReportExportView(LoginRequiredMixin, View):
     """
-    Export pivot table data in various formats: Excel, CSV, PDF
+    Export pivot table data in various formats: Excel, CSV
     """
 
     def get(self, request, pk):
@@ -4255,6 +4240,8 @@ class ReportExportView(LoginRequiredMixin, View):
 
         detail_view = ReportDetailView()
         detail_view.request = request
+        detail_view.args = self.args
+        detail_view.kwargs = self.kwargs
         detail_view.object = report
         detail_context = detail_view.get_context_data()
 
@@ -4262,13 +4249,11 @@ class ReportExportView(LoginRequiredMixin, View):
             return self.export_excel(report, df, detail_context, temp_report)
         elif export_format == "csv":
             return self.export_csv(report, df, detail_context, temp_report)
-        elif export_format == "pdf":
-            return self.export_pdf(report, df, detail_context, temp_report)
         else:
             return self.export_excel(report, df, detail_context, temp_report)
 
     def create_temp_report(self, original_report, preview_data):
-        """Create temporary report with preview data - same as ReportDetailView"""
+        """Create temporary report with preview data"""
         temp_report = copy.copy(original_report)
         if "selected_columns" in preview_data:
             temp_report.selected_columns = preview_data["selected_columns"]
@@ -4280,10 +4265,89 @@ class ReportExportView(LoginRequiredMixin, View):
             temp_report.aggregate_columns = preview_data["aggregate_columns"]
         if "filters" in preview_data:
             temp_report.filters = preview_data["filters"]
+        if "chart_type" in preview_data:
+            temp_report.chart_type = preview_data["chart_type"]
+        if "chart_field" in preview_data:
+            temp_report.chart_field = preview_data["chart_field"]
+        if "chart_field_stacked" in preview_data:
+            temp_report.chart_field_stacked = preview_data["chart_field_stacked"]
         return temp_report
 
+    def should_skip_key(self, key_or_value):
+        """
+        Check if a key should be skipped (like ID-only keys)
+        Returns True if this is an ID-only key that should be filtered out
+        """
+        if not key_or_value:
+            return False
+
+        key_str = str(key_or_value).strip()
+
+        # Skip keys that start with | followed by digits (these are ID-only keys)
+        if key_str.startswith("|"):
+            # Check if everything after | is a digit
+            rest = key_str[1:].strip()
+            if rest.isdigit():
+                return True
+
+        # Skip keys that are just pipe symbols or contain only pipes and numbers
+        # This handles cases like "|4", "| 5", etc.
+        if "|" in key_str:
+            parts = key_str.split("|")
+            # If we get something like ['', '4'] or ['', ' 5']
+            if len(parts) == 2 and parts[0] == "" and parts[1].strip().isdigit():
+                return True
+
+        return False
+
+    def extract_display_value(self, key_or_value):
+        """
+        Extract display value from various key formats.
+        Handles: "DisplayName||ID", "ID", "ChoiceValue", etc.
+        Always returns the human-readable display name.
+        """
+        if not key_or_value:
+            return "Unspecified (-)"
+
+        key_str = str(key_or_value)
+
+        # If it contains ||, it's a composite key: "DisplayName||ID"
+        if "||" in key_str:
+            return key_str.split("||")[0]
+
+        # Otherwise return as-is
+        return key_str
+
+    def filter_pivot_data(self, pivot_table, pivot_index, pivot_columns):
+        """
+        Filter out ID-only keys from pivot table data
+        Returns cleaned pivot_table, pivot_index, and pivot_columns
+        """
+        # Filter pivot_index (rows)
+        filtered_index = []
+        for key in pivot_index:
+            if not self.should_skip_key(key):
+                filtered_index.append(key)
+
+        # Filter pivot_columns (columns)
+        filtered_columns = []
+        for key in pivot_columns:
+            if not self.should_skip_key(key):
+                filtered_columns.append(key)
+
+        # Rebuild pivot_table with only valid keys
+        filtered_table = {}
+        for row_key in filtered_index:
+            if row_key in pivot_table:
+                filtered_table[row_key] = {}
+                for col_key in filtered_columns:
+                    if col_key in pivot_table[row_key]:
+                        filtered_table[row_key][col_key] = pivot_table[row_key][col_key]
+
+        return filtered_table, filtered_index, filtered_columns
+
     def get_report_data(self, temp_report, request):
-        """Get processed report data - simplified version of ReportDetailView logic"""
+        """Get processed report data"""
         model_class = temp_report.model_class
         queryset = model_class.objects.all()
 
@@ -4363,196 +4427,6 @@ class ReportExportView(LoginRequiredMixin, View):
         col_count = len(report.column_groups_list)
         return f"{row_count}_row_{col_count}_col"
 
-    def get_display_value(self, value, field_name, model_class):
-        """Get display value for field - same logic as ReportDetailView"""
-        try:
-            field = model_class._meta.get_field(field_name)
-            if hasattr(field, "related_model") and field.related_model:
-                try:
-                    related_obj = field.related_model.objects.get(pk=value)
-                    return str(related_obj)
-                except field.related_model.DoesNotExist:
-                    return f"Unknown ({value})"
-
-            if hasattr(field, "choices") and field.choices:
-                choice_dict = dict(field.choices)
-                return choice_dict.get(value, value)
-
-            if value is None or value == "":
-                return "Unspecified (-)"
-
-            return str(value)
-        except:
-            return str(value) if value is not None else "Unspecified (-)"
-
-    def get_verbose_name(self, field_name, model_class):
-        """Get the verbose name of a field"""
-        try:
-            return model_class._meta.get_field(field_name).verbose_name.title()
-        except:
-            return field_name.title()
-
-    def _create_pivot_sheet(self, ws, df, detail_context, temp_report):
-        """Create pivot table sheet that matches the web detail view exactly"""
-        pivot_table = detail_context.get("pivot_table", {})
-        pivot_index = detail_context.get("pivot_index", [])
-        pivot_columns = detail_context.get("pivot_columns", [])
-
-        if not pivot_table or not pivot_index:
-            ws["A1"] = "No pivot table data available"
-            return
-
-        # Create two-row header structure like your web interface
-        # Row 1: Group headers (Campaign, Email, etc.)
-        # Row 2: Campaign type headers (Education, Finance, etc.)
-
-        ws.cell(row=1, column=1, value="Lead Status")
-        ws.cell(row=2, column=1, value="Lead Status")
-
-        # Merge the Lead Status cells
-        ws.merge_cells("A1:A2")
-        ws["A1"].font = Font(bold=True)
-        ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
-
-        # Parse column structure to create grouped headers
-        current_col = 2
-        group_starts = {}  # Track where each group starts for merging
-
-        # First pass: identify groups and their ranges
-        current_group = None
-        group_start_col = 2
-
-        for col_name in pivot_columns:
-            if "|" in col_name:
-                group_name, campaign_type = col_name.split("|", 1)
-            else:
-                group_name = "Other"
-                campaign_type = col_name
-
-            # If this is a new group, record the previous group's range
-            if current_group != group_name:
-                if current_group is not None:
-                    group_starts[current_group] = (group_start_col, current_col - 1)
-                current_group = group_name
-                group_start_col = current_col
-
-            current_col += 1
-
-        # Record the last group
-        if current_group is not None:
-            group_starts[current_group] = (group_start_col, current_col - 1)
-
-        # Create group headers (row 1) and campaign headers (row 2)
-        current_col = 2
-        for col_name in pivot_columns:
-            if "|" in col_name:
-                group_name, campaign_type = col_name.split("|", 1)
-            else:
-                group_name = "Other"
-                campaign_type = col_name
-
-            # Set group header (row 1)
-            cell1 = ws.cell(row=1, column=current_col, value=group_name)
-            cell1.font = Font(bold=True)
-            cell1.alignment = Alignment(horizontal="center")
-
-            # Set campaign type header (row 2)
-            cell2 = ws.cell(row=2, column=current_col, value=campaign_type)
-            cell2.font = Font(bold=True)
-            cell2.alignment = Alignment(horizontal="center")
-
-            current_col += 1
-
-        # Merge cells for group headers
-        for group_name, (start_col, end_col) in group_starts.items():
-            if start_col < end_col:  # Only merge if there are multiple columns
-                start_cell = openpyxl.utils.get_column_letter(start_col)
-                end_cell = openpyxl.utils.get_column_letter(end_col)
-                ws.merge_cells(f"{start_cell}1:{end_cell}1")
-
-        # Data rows starting from row 3
-        lead_statuses = ["New", "Contacted", "Qualified", "Proposal", "Lost"]
-
-        for row_idx, status in enumerate(lead_statuses, 3):
-            # Lead Status column
-            ws.cell(row=row_idx, column=1, value=status)
-
-            # Data values for each campaign
-            for col_idx, col_name in enumerate(pivot_columns, 2):
-                if status in pivot_table and col_name in pivot_table[status]:
-                    value = pivot_table[status][col_name]
-                else:
-                    value = 0
-                ws.cell(row=row_idx, column=col_idx, value=value)
-
-        # Total row
-        total_row = len(lead_statuses) + 3
-        total_cell = ws.cell(row=total_row, column=1, value="Total")
-        total_cell.font = Font(bold=True)
-
-        # Calculate totals for each column
-        for col_idx, col_name in enumerate(pivot_columns, 2):
-            total_value = 0
-            for status in lead_statuses:
-                if status in pivot_table and col_name in pivot_table[status]:
-                    total_value += pivot_table[status][col_name]
-
-            cell = ws.cell(row=total_row, column=col_idx, value=total_value)
-            cell.font = Font(bold=True)
-
-        # Apply styling and borders
-        max_row = total_row
-        max_col = len(pivot_columns) + 1
-
-        thin_border = Border(
-            left=Side(style="thin"),
-            right=Side(style="thin"),
-            top=Side(style="thin"),
-            bottom=Side(style="thin"),
-        )
-
-        # Apply borders to all cells
-        for row in range(1, max_row + 1):
-            for col in range(1, max_col + 1):
-                cell = ws.cell(row=row, column=col)
-                cell.border = thin_border
-
-                # Center align numeric data
-                if row > 2 and col > 1:
-                    cell.alignment = Alignment(horizontal="center")
-
-        # Auto-adjust column widths
-        for col_idx in range(1, max_col + 1):
-            col_letter = openpyxl.utils.get_column_letter(col_idx)
-            max_length = 0
-
-            for row_idx in range(1, max_row + 1):
-                cell = ws.cell(row=row_idx, column=col_idx)
-                if cell.value:
-                    max_length = max(max_length, len(str(cell.value)))
-
-            # Set appropriate column width
-            if col_idx == 1:  # Lead Status column
-                adjusted_width = max(max_length + 2, 12)
-            else:  # Campaign columns
-                adjusted_width = max(max_length + 2, 10)
-
-            ws.column_dimensions[col_letter].width = min(adjusted_width, 20)
-
-        # Add header row background colors
-        for col_idx in range(1, max_col + 1):
-            # Group header row (row 1)
-            cell1 = ws.cell(row=1, column=col_idx)
-            cell1.fill = PatternFill(
-                start_color="D6EAF8", end_color="D6EAF8", fill_type="solid"
-            )
-
-            # Campaign header row (row 2)
-            cell2 = ws.cell(row=2, column=col_idx)
-            cell2.fill = PatternFill(
-                start_color="E8F4FD", end_color="E8F4FD", fill_type="solid"
-            )
-
     def export_excel(self, report, df, detail_context, temp_report):
         """Export pivot table as Excel file"""
         response = HttpResponse(
@@ -4567,8 +4441,9 @@ class ReportExportView(LoginRequiredMixin, View):
         ws = wb.active
         ws.title = "Pivot Table"
 
-        # Write pivot table data
-        self._create_pivot_sheet(ws, df, detail_context, temp_report)
+        # Write pivot table data based on configuration type
+        config_type = self.get_configuration_type(temp_report)
+        self._create_excel_sheet(ws, df, detail_context, temp_report, config_type)
 
         # Add metadata sheet
         meta_ws = wb.create_sheet("Report Info")
@@ -4583,6 +4458,649 @@ class ReportExportView(LoginRequiredMixin, View):
         wb.save(response)
         return response
 
+    def _create_excel_sheet(self, ws, df, detail_context, temp_report, config_type):
+        """Route to appropriate sheet creation method based on configuration"""
+        if config_type == "2_row_0_col":
+            self._create_hierarchical_excel_sheet(
+                ws, detail_context, temp_report, "2_level"
+            )
+        elif config_type == "2_row_1_col":
+            self._create_hierarchical_excel_sheet(
+                ws, detail_context, temp_report, "2_level_with_col"
+            )
+        elif config_type == "3_row_0_col":
+            self._create_hierarchical_excel_sheet(
+                ws, detail_context, temp_report, "3_level"
+            )
+        else:
+            # Use existing pivot table logic for 0x0, 1x0, 1x1, 1x2
+            self._create_pivot_sheet(ws, df, detail_context, temp_report)
+
+    def _create_hierarchical_excel_sheet(
+        self, ws, detail_context, temp_report, hierarchy_type
+    ):
+        """Create Excel sheet for hierarchical data structures (2 row 0 col, 2 row 1 col, 3 row 0 col)"""
+
+        if hierarchy_type == "3_level":
+            three_level_data = detail_context.get("three_level_data", {})
+            groups = three_level_data.get("groups", [])
+            grand_total = three_level_data.get("grand_total", 0)
+            aggregate_columns = detail_context.get("aggregate_columns", [])
+            row_verbose_names = detail_context.get("row_group_verbose_names", [])
+
+            if not groups:
+                ws["A1"] = "No data available"
+                return
+
+            # Create headers - use verbose names instead of generic labels
+            level1_header = (
+                row_verbose_names[0]
+                if row_verbose_names and len(row_verbose_names) > 0
+                else "Level 1"
+            )
+            level2_header = (
+                row_verbose_names[1]
+                if row_verbose_names and len(row_verbose_names) > 1
+                else "Level 2"
+            )
+            level3_header = (
+                row_verbose_names[2]
+                if row_verbose_names and len(row_verbose_names) > 2
+                else "Level 3"
+            )
+            headers = [level1_header, level2_header, level3_header, "Count"]
+            for agg in aggregate_columns:
+                headers.append(agg["name"])
+
+            for col_idx, header in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col_idx, value=str(header))
+                cell.font = Font(bold=True)
+                cell.fill = PatternFill(
+                    start_color="D6EAF8", end_color="D6EAF8", fill_type="solid"
+                )
+                cell.alignment = Alignment(horizontal="center")
+
+            # Write data - Convert all display values to strings and track merging
+            row_idx = 2
+            for level1_group in groups:
+                level1_start_row = row_idx
+                for level2_group in level1_group["level2_groups"]:
+                    level2_start_row = row_idx
+                    for level3_item in level2_group["level3_items"]:
+                        ws.cell(
+                            row=row_idx,
+                            column=1,
+                            value=str(level1_group["level1_group_display"]),
+                        )
+                        ws.cell(
+                            row=row_idx,
+                            column=2,
+                            value=str(level2_group["level2_group_display"]),
+                        )
+                        ws.cell(
+                            row=row_idx,
+                            column=3,
+                            value=str(level3_item["level3_group_display"]),
+                        )
+                        ws.cell(row=row_idx, column=4, value=level3_item["count"])
+
+                        col_idx = 5
+                        for agg in aggregate_columns:
+                            value = level3_item["aggregate_values"].get(agg["name"], 0)
+                            ws.cell(row=row_idx, column=col_idx, value=value)
+                            col_idx += 1
+                        row_idx += 1
+
+                    # Merge level2 cells if there are multiple level3 items
+                    level2_end_row = row_idx - 1
+                    if level2_end_row > level2_start_row:
+                        ws.merge_cells(
+                            start_row=level2_start_row,
+                            start_column=2,
+                            end_row=level2_end_row,
+                            end_column=2,
+                        )
+                        ws.cell(row=level2_start_row, column=2).alignment = Alignment(
+                            horizontal="center", vertical="center"
+                        )
+
+                # Merge level1 cells if there are multiple level2 groups
+                level1_end_row = row_idx - 1
+                if level1_end_row > level1_start_row:
+                    ws.merge_cells(
+                        start_row=level1_start_row,
+                        start_column=1,
+                        end_row=level1_end_row,
+                        end_column=1,
+                    )
+                    ws.cell(row=level1_start_row, column=1).alignment = Alignment(
+                        horizontal="center", vertical="center"
+                    )
+
+            # Add grand total
+            ws.cell(row=row_idx, column=1, value="Grand Total").font = Font(bold=True)
+            ws.cell(row=row_idx, column=4, value=grand_total).font = Font(bold=True)
+
+        elif hierarchy_type in ["2_level", "2_level_with_col"]:
+            hierarchical_data = detail_context.get("hierarchical_data", {})
+            groups = hierarchical_data.get("groups", [])
+            grand_total = hierarchical_data.get("grand_total", 0)
+            pivot_columns = detail_context.get("pivot_columns", [])
+            aggregate_columns = detail_context.get("aggregate_columns", [])
+            row_verbose_names = detail_context.get("row_group_verbose_names", [])
+
+            if not groups:
+                ws["A1"] = "No data available"
+                return
+
+            # Create headers - use verbose names instead of generic labels
+            primary_header = (
+                row_verbose_names[0]
+                if row_verbose_names and len(row_verbose_names) > 0
+                else "Primary Group"
+            )
+            secondary_header = (
+                row_verbose_names[1]
+                if row_verbose_names and len(row_verbose_names) > 1
+                else "Secondary Group"
+            )
+            headers = [primary_header, secondary_header]
+            if hierarchy_type == "2_level_with_col":
+                headers.extend(pivot_columns)
+            else:
+                headers.extend(
+                    pivot_columns
+                )  # This includes "Count" and aggregate columns
+
+            for col_idx, header in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col_idx, value=str(header))
+                cell.font = Font(bold=True)
+                cell.fill = PatternFill(
+                    start_color="D6EAF8", end_color="D6EAF8", fill_type="solid"
+                )
+                cell.alignment = Alignment(horizontal="center")
+
+            # Write data - Convert all display values to strings and track merging
+            row_idx = 2
+            for group in groups:
+                group_start_row = row_idx
+                for item in group["items"]:
+                    ws.cell(
+                        row=row_idx, column=1, value=str(group["primary_group_display"])
+                    )
+                    ws.cell(
+                        row=row_idx,
+                        column=2,
+                        value=str(item["secondary_group_display"]),
+                    )
+
+                    col_idx = 3
+                    for col_name in pivot_columns:
+                        value = item["values"].get(col_name, 0)
+                        ws.cell(row=row_idx, column=col_idx, value=value)
+                        col_idx += 1
+                    row_idx += 1
+
+                # Merge primary group cells if there are multiple secondary items
+                group_end_row = row_idx - 1
+                if group_end_row > group_start_row:
+                    ws.merge_cells(
+                        start_row=group_start_row,
+                        start_column=1,
+                        end_row=group_end_row,
+                        end_column=1,
+                    )
+                    ws.cell(row=group_start_row, column=1).alignment = Alignment(
+                        horizontal="center", vertical="center"
+                    )
+
+                # Add subtotal row
+                subtotal_cell = ws.cell(
+                    row=row_idx,
+                    column=2,
+                    value=f"{str(group['primary_group_display'])} Subtotal",
+                )
+                subtotal_cell.font = Font(bold=True, italic=True)
+                ws.cell(row=row_idx, column=3, value=group["subtotal"]).font = Font(
+                    bold=True
+                )
+                row_idx += 1
+
+            # Add grand total
+            ws.cell(row=row_idx, column=2, value="Grand Total").font = Font(bold=True)
+            ws.cell(row=row_idx, column=3, value=grand_total).font = Font(bold=True)
+
+        # Apply borders and auto-adjust columns
+        thin_border = Border(
+            left=Side(style="thin"),
+            right=Side(style="thin"),
+            top=Side(style="thin"),
+            bottom=Side(style="thin"),
+        )
+
+        max_row = ws.max_row
+        max_col = ws.max_column
+
+        for row in range(1, max_row + 1):
+            for col in range(1, max_col + 1):
+                ws.cell(row=row, column=col).border = thin_border
+                if row > 1 and col > 2:
+                    ws.cell(row=row, column=col).alignment = Alignment(
+                        horizontal="center"
+                    )
+
+        # Auto-adjust column widths
+        for col_idx in range(1, max_col + 1):
+            col_letter = openpyxl.utils.get_column_letter(col_idx)
+            max_length = 0
+            for row_idx in range(1, max_row + 1):
+                cell = ws.cell(row=row_idx, column=col_idx)
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+            adjusted_width = max(max_length + 2, 12)
+            ws.column_dimensions[col_letter].width = min(adjusted_width, 30)
+
+    def _create_hierarchical_csv(self, writer, detail_context, hierarchy_type):
+        """Create CSV for hierarchical data structures"""
+
+        if hierarchy_type == "3_level":
+            three_level_data = detail_context.get("three_level_data", {})
+            groups = three_level_data.get("groups", [])
+            grand_total = three_level_data.get("grand_total", 0)
+            aggregate_columns = detail_context.get("aggregate_columns", [])
+            row_verbose_names = detail_context.get("row_group_verbose_names", [])
+
+            if not groups:
+                writer.writerow(["No data available"])
+                return
+
+            # Headers - use verbose names
+            level1_header = (
+                row_verbose_names[0]
+                if row_verbose_names and len(row_verbose_names) > 0
+                else "Level 1"
+            )
+            level2_header = (
+                row_verbose_names[1]
+                if row_verbose_names and len(row_verbose_names) > 1
+                else "Level 2"
+            )
+            level3_header = (
+                row_verbose_names[2]
+                if row_verbose_names and len(row_verbose_names) > 2
+                else "Level 3"
+            )
+            headers = [level1_header, level2_header, level3_header, "Count"]
+            for agg in aggregate_columns:
+                headers.append(agg["name"])
+            writer.writerow(headers)
+
+            # Data rows
+            for level1_group in groups:
+                for level2_group in level1_group["level2_groups"]:
+                    for level3_item in level2_group["level3_items"]:
+                        row = [
+                            level1_group["level1_group_display"],
+                            level2_group["level2_group_display"],
+                            level3_item["level3_group_display"],
+                            level3_item["count"],
+                        ]
+                        for agg in aggregate_columns:
+                            row.append(
+                                level3_item["aggregate_values"].get(agg["name"], 0)
+                            )
+                        writer.writerow(row)
+
+            # Grand total
+            total_row = ["Grand Total", "", "", grand_total]
+            writer.writerow(total_row)
+
+        elif hierarchy_type in ["2_level", "2_level_with_col"]:
+            hierarchical_data = detail_context.get("hierarchical_data", {})
+            groups = hierarchical_data.get("groups", [])
+            grand_total = hierarchical_data.get("grand_total", 0)
+            pivot_columns = detail_context.get("pivot_columns", [])
+            row_verbose_names = detail_context.get("row_group_verbose_names", [])
+
+            if not groups:
+                writer.writerow(["No data available"])
+                return
+
+            # Headers - use verbose names
+            primary_header = (
+                row_verbose_names[0]
+                if row_verbose_names and len(row_verbose_names) > 0
+                else "Primary Group"
+            )
+            secondary_header = (
+                row_verbose_names[1]
+                if row_verbose_names and len(row_verbose_names) > 1
+                else "Secondary Group"
+            )
+            headers = [primary_header, secondary_header]
+            headers.extend(pivot_columns)
+            writer.writerow(headers)
+
+            # Data rows
+            for group in groups:
+                for item in group["items"]:
+                    row = [
+                        group["primary_group_display"],
+                        item["secondary_group_display"],
+                    ]
+                    for col_name in pivot_columns:
+                        row.append(item["values"].get(col_name, 0))
+                    writer.writerow(row)
+
+                # Subtotal row
+                subtotal_row = [
+                    "",
+                    f"{group['primary_group_display']} Subtotal",
+                    group["subtotal"],
+                ]
+                writer.writerow(subtotal_row)
+
+            # Grand total
+            writer.writerow(["", "Grand Total", grand_total])
+
+    def _create_pivot_sheet(self, ws, df, detail_context, temp_report):
+        """Create pivot table sheet that matches the web detail view"""
+        pivot_table = detail_context.get("pivot_table", {})
+        pivot_index = detail_context.get("pivot_index", [])
+        pivot_columns = detail_context.get("pivot_columns", [])
+        row_verbose_names = detail_context.get("row_group_verbose_names", [])
+
+        # FILTER OUT ID-ONLY KEYS
+        pivot_table, pivot_index, pivot_columns = self.filter_pivot_data(
+            pivot_table, pivot_index, pivot_columns
+        )
+
+        if not pivot_table:
+            # Handle 0x0 configuration (simple aggregate)
+            simple_aggregate = detail_context.get("simple_aggregate", {})
+            aggregate_columns = detail_context.get("aggregate_columns", [])
+
+            if simple_aggregate or aggregate_columns:
+                ws["A1"] = "Metric"
+                ws["B1"] = "Value"
+                ws["A1"].font = Font(bold=True)
+                ws["B1"].font = Font(bold=True)
+                ws["A1"].fill = PatternFill(
+                    start_color="D6EAF8", end_color="D6EAF8", fill_type="solid"
+                )
+                ws["B1"].fill = PatternFill(
+                    start_color="D6EAF8", end_color="D6EAF8", fill_type="solid"
+                )
+
+                row_idx = 2
+                if aggregate_columns:
+                    for agg in aggregate_columns:
+                        ws.cell(row=row_idx, column=1, value=agg["name"])
+                        ws.cell(row=row_idx, column=2, value=agg["value"])
+                        row_idx += 1
+                elif simple_aggregate:
+                    metric_name = f"{simple_aggregate['function'].title()} of {simple_aggregate['field']}"
+                    ws.cell(row=row_idx, column=1, value=metric_name)
+                    ws.cell(row=row_idx, column=2, value=simple_aggregate["value"])
+            else:
+                ws["A1"] = "No pivot table data available"
+            return
+
+        if not pivot_index:
+            ws["A1"] = "No data available"
+            return
+
+        # Get the row group field name dynamically
+        row_header = row_verbose_names[0] if row_verbose_names else "Row Group"
+
+        # Determine if we need grouped headers
+        # Check for hierarchical column structure (1 row × 2 col creates "Group1||ID|Group2||ID" format)
+        has_hierarchical_columns = any(
+            col.count("|") == 3 and "||" in col for col in pivot_columns
+        )
+
+        # Check for simple grouped columns (like in 1×1 where aggregate columns are added)
+        has_simple_groups = len(pivot_columns) > 1 and not has_hierarchical_columns
+
+        if has_hierarchical_columns:
+            # 1 row × 2 col configuration
+            self._create_hierarchical_column_sheet(
+                ws, pivot_table, pivot_index, pivot_columns, row_header
+            )
+        elif has_simple_groups:
+            # 1 row × 0 col or 1 row × 1 col with aggregate columns
+            self._create_simple_header_sheet(
+                ws, pivot_table, pivot_index, pivot_columns, row_header
+            )
+        else:
+            # Simplest case
+            self._create_simple_header_sheet(
+                ws, pivot_table, pivot_index, pivot_columns, row_header
+            )
+
+    def _create_hierarchical_column_sheet(
+        self, ws, pivot_table, pivot_index, pivot_columns, row_header
+    ):
+        """Create sheet with hierarchical column headers (for 1 row × 2 col)"""
+        # Parse hierarchical columns: "Group1Display||Group1ID|Group2Display||Group2ID"
+        ws.cell(row=1, column=1, value=row_header)
+        ws.cell(row=2, column=1, value=row_header)
+        ws.merge_cells("A1:A2")
+        ws["A1"].font = Font(bold=True)
+        ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+
+        current_col = 2
+        group_starts = {}
+        current_group = None
+        group_start_col = 2
+
+        # Parse column structure
+        for col_name in pivot_columns:
+            if "|" in col_name and "||" in col_name:
+                # Split by single | first to separate the two groups
+                main_parts = col_name.split("|")
+
+                # Reconstruct the two composite keys
+                # Format: "Display1||ID1|Display2||ID2"
+                # After split by |: ['Display1', '', 'ID1', 'Display2', '', 'ID2']
+                # Or more likely: ['Display1||ID1', 'Display2||ID2'] if we split smartly
+
+                # Let's use a smarter approach - find the pattern
+                if main_parts[1] == "":  # This means we have || in the string
+                    # Reconstruct: parts[0] is Display1, parts[2] is ID1, parts[3] is Display2, parts[5] is ID2
+                    if len(main_parts) >= 4:
+                        group1_display = self.extract_display_value(
+                            main_parts[0] + "||" + main_parts[2]
+                        )
+                        if len(main_parts) >= 6:
+                            group2_display = self.extract_display_value(
+                                main_parts[3] + "||" + main_parts[5]
+                            )
+                        else:
+                            group2_display = self.extract_display_value(main_parts[3])
+                    else:
+                        # Fallback
+                        group1_display = self.extract_display_value(col_name)
+                        group2_display = ""
+                else:
+                    # Try to find || positions
+                    first_double_pipe = col_name.find("||")
+                    if first_double_pipe != -1:
+                        # Find the single | after the first ||
+                        search_start = first_double_pipe + 2
+                        next_single_pipe = col_name.find("|", search_start)
+                        while (
+                            next_single_pipe != -1
+                            and next_single_pipe < len(col_name) - 1
+                            and col_name[next_single_pipe + 1] == "|"
+                        ):
+                            next_single_pipe = col_name.find("|", next_single_pipe + 2)
+
+                        if next_single_pipe != -1:
+                            # Split at this position
+                            group1_composite = col_name[:next_single_pipe]
+                            group2_composite = col_name[next_single_pipe + 1 :]
+                            group1_display = self.extract_display_value(
+                                group1_composite
+                            )
+                            group2_display = self.extract_display_value(
+                                group2_composite
+                            )
+                        else:
+                            group1_display = self.extract_display_value(col_name)
+                            group2_display = ""
+                    else:
+                        group1_display = self.extract_display_value(col_name)
+                        group2_display = ""
+
+                if current_group != group1_display:
+                    if current_group is not None:
+                        group_starts[current_group] = (group_start_col, current_col - 1)
+                    current_group = group1_display
+                    group_start_col = current_col
+
+                # Set headers
+                ws.cell(row=1, column=current_col, value=group1_display).font = Font(
+                    bold=True
+                )
+                ws.cell(row=2, column=current_col, value=group2_display).font = Font(
+                    bold=True
+                )
+            else:
+                # Aggregate column (no || present)
+                display_name = self.extract_display_value(col_name)
+                ws.cell(row=1, column=current_col, value=display_name).font = Font(
+                    bold=True
+                )
+                ws.cell(row=2, column=current_col, value="").font = Font(bold=True)
+
+            current_col += 1
+
+        # Record last group
+        if current_group is not None:
+            group_starts[current_group] = (group_start_col, current_col - 1)
+
+        # Merge group headers
+        for group_name, (start_col, end_col) in group_starts.items():
+            if start_col < end_col:
+                start_cell = openpyxl.utils.get_column_letter(start_col)
+                end_cell = openpyxl.utils.get_column_letter(end_col)
+                ws.merge_cells(f"{start_cell}1:{end_cell}1")
+                ws[f"{start_cell}1"].alignment = Alignment(horizontal="center")
+
+        # Write data rows
+        for row_idx, row_key in enumerate(pivot_index, 3):
+            display_value = self.extract_display_value(row_key)
+            ws.cell(row=row_idx, column=1, value=display_value)
+
+            for col_idx, col_name in enumerate(pivot_columns, 2):
+                value = pivot_table.get(row_key, {}).get(col_name, 0)
+                ws.cell(row=row_idx, column=col_idx, value=value)
+
+        # Add total row
+        total_row = len(pivot_index) + 3
+        ws.cell(row=total_row, column=1, value="Total").font = Font(bold=True)
+
+        for col_idx, col_name in enumerate(pivot_columns, 2):
+            total_value = sum(
+                pivot_table.get(row_key, {}).get(col_name, 0) for row_key in pivot_index
+            )
+            ws.cell(row=total_row, column=col_idx, value=total_value).font = Font(
+                bold=True
+            )
+
+        # Apply styling
+        self._apply_excel_styling(ws, total_row, len(pivot_columns) + 1, header_rows=2)
+
+    def _create_simple_header_sheet(
+        self, ws, pivot_table, pivot_index, pivot_columns, row_header
+    ):
+        """Create pivot sheet with single-row header"""
+        # Single header row
+        ws.cell(row=1, column=1, value=row_header)
+        ws.cell(row=1, column=1).font = Font(bold=True)
+        ws.cell(row=1, column=1).alignment = Alignment(
+            horizontal="center", vertical="center"
+        )
+
+        # Column headers
+        for col_idx, col_name in enumerate(pivot_columns, 2):
+            display_name = self.extract_display_value(col_name)
+            cell = ws.cell(row=1, column=col_idx, value=display_name)
+            cell.font = Font(bold=True)
+            cell.alignment = Alignment(horizontal="center")
+
+        # Data rows
+        for row_idx, row_key in enumerate(pivot_index, 2):
+            display_value = self.extract_display_value(row_key)
+            ws.cell(row=row_idx, column=1, value=display_value)
+
+            for col_idx, col_name in enumerate(pivot_columns, 2):
+                value = pivot_table.get(row_key, {}).get(col_name, 0)
+                ws.cell(row=row_idx, column=col_idx, value=value)
+
+        # Total row
+        total_row = len(pivot_index) + 2
+        ws.cell(row=total_row, column=1, value="Total").font = Font(bold=True)
+
+        for col_idx, col_name in enumerate(pivot_columns, 2):
+            total_value = sum(
+                pivot_table.get(row_key, {}).get(col_name, 0) for row_key in pivot_index
+            )
+            ws.cell(row=total_row, column=col_idx, value=total_value).font = Font(
+                bold=True
+            )
+
+        # Apply styling
+        self._apply_excel_styling(ws, total_row, len(pivot_columns) + 1, header_rows=1)
+
+    def _apply_excel_styling(self, ws, max_row, max_col, header_rows=1):
+        """Apply consistent styling to Excel sheets"""
+        thin_border = Border(
+            left=Side(style="thin"),
+            right=Side(style="thin"),
+            top=Side(style="thin"),
+            bottom=Side(style="thin"),
+        )
+
+        # Apply borders and alignment
+        for row in range(1, max_row + 1):
+            for col in range(1, max_col + 1):
+                cell = ws.cell(row=row, column=col)
+                cell.border = thin_border
+
+                # Center align data cells
+                if row > header_rows and col > 1:
+                    cell.alignment = Alignment(horizontal="center")
+
+        # Auto-adjust column widths
+        for col_idx in range(1, max_col + 1):
+            col_letter = openpyxl.utils.get_column_letter(col_idx)
+            max_length = 0
+
+            for row_idx in range(1, max_row + 1):
+                cell = ws.cell(row=row_idx, column=col_idx)
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+
+            adjusted_width = (
+                max(max_length + 2, 12) if col_idx == 1 else max(max_length + 2, 10)
+            )
+            ws.column_dimensions[col_letter].width = min(adjusted_width, 30)
+
+        # Add header background colors
+        for col_idx in range(1, max_col + 1):
+            for header_row in range(1, header_rows + 1):
+                cell = ws.cell(row=header_row, column=col_idx)
+                if header_row == 1:
+                    cell.fill = PatternFill(
+                        start_color="D6EAF8", end_color="D6EAF8", fill_type="solid"
+                    )
+                else:
+                    cell.fill = PatternFill(
+                        start_color="E8F4FD", end_color="E8F4FD", fill_type="solid"
+                    )
+
     def export_csv(self, report, df, detail_context, temp_report):
         """Export pivot table as CSV"""
         response = HttpResponse(content_type="text/csv")
@@ -4591,160 +5109,199 @@ class ReportExportView(LoginRequiredMixin, View):
         )
 
         writer = csv.writer(response)
+        config_type = self.get_configuration_type(temp_report)
+
+        if config_type == "2_row_0_col":
+            self._create_hierarchical_csv(writer, detail_context, "2_level")
+        elif config_type == "2_row_1_col":
+            self._create_hierarchical_csv(writer, detail_context, "2_level_with_col")
+        elif config_type == "3_row_0_col":
+            self._create_hierarchical_csv(writer, detail_context, "3_level")
+        else:
+            self._create_pivot_csv(writer, detail_context, temp_report)
+
+        return response
+
+    # def _create_hierarchical_csv(self, writer, detail_context, hierarchy_type):
+    #     """Create CSV for hierarchical data structures"""
+
+    #     if hierarchy_type == "3_level":
+    #         three_level_data = detail_context.get("three_level_data", {})
+    #         groups = three_level_data.get("groups", [])
+    #         grand_total = three_level_data.get("grand_total", 0)
+    #         aggregate_columns = detail_context.get("aggregate_columns", [])
+    #         row_verbose_names = detail_context.get("row_group_verbose_names", [])
+
+    #         if not groups:
+    #             writer.writerow(["No data available"])
+    #             return
+
+    #         # Headers - use verbose names
+    #         level1_header = row_verbose_names[0] if row_verbose_names and len(row_verbose_names) > 0 else "Level 1"
+    #         level2_header = row_verbose_names[1] if row_verbose_names and len(row_verbose_names) > 1 else "Level 2"
+    #         level3_header = row_verbose_names[2] if row_verbose_names and len(row_verbose_names) > 2 else "Level 3"
+    #         headers = [level1_header, level2_header, level3_header, "Count"]
+    #         for agg in aggregate_columns:
+    #             headers.append(agg["name"])
+    #         writer.writerow(headers)
+
+    #         # Data rows
+    #         for level1_group in groups:
+    #             for level2_group in level1_group["level2_groups"]:
+    #                 for level3_item in level2_group["level3_items"]:
+    #                     row = [
+    #                         level1_group["level1_group_display"],
+    #                         level2_group["level2_group_display"],
+    #                         level3_item["level3_group_display"],
+    #                         level3_item["count"]
+    #                     ]
+    #                     for agg in aggregate_columns:
+    #                         row.append(level3_item["aggregate_values"].get(agg["name"], 0))
+    #                     writer.writerow(row)
+
+    #         # Grand total
+    #         total_row = ["Grand Total", "", "", grand_total]
+    #         writer.writerow(total_row)
+
+    #     elif hierarchy_type in ["2_level", "2_level_with_col"]:
+    #         hierarchical_data = detail_context.get("hierarchical_data", {})
+    #         groups = hierarchical_data.get("groups", [])
+    #         grand_total = hierarchical_data.get("grand_total", 0)
+    #         pivot_columns = detail_context.get("pivot_columns", [])
+    #         row_verbose_names = detail_context.get("row_group_verbose_names", [])
+
+    #         if not groups:
+    #             writer.writerow(["No data available"])
+    #             return
+
+    #         # Headers - use verbose names
+    #         primary_header = row_verbose_names[0] if row_verbose_names and len(row_verbose_names) > 0 else "Primary Group"
+    #         secondary_header = row_verbose_names[1] if row_verbose_names and len(row_verbose_names) > 1 else "Secondary Group"
+    #         headers = [primary_header, secondary_header]
+    #         headers.extend(pivot_columns)
+    #         writer.writerow(headers)
+
+    #         # Data rows
+    #         for group in groups:
+    #             for item in group["items"]:
+    #                 row = [group["primary_group_display"], item["secondary_group_display"]]
+    #                 for col_name in pivot_columns:
+    #                     row.append(item["values"].get(col_name, 0))
+    #                 writer.writerow(row)
+
+    #             # Subtotal row
+    #             subtotal_row = ["", f"{group['primary_group_display']} Subtotal", group["subtotal"]]
+    #             writer.writerow(subtotal_row)
+
+    #         # Grand total
+    #         writer.writerow(["", "Grand Total", grand_total])
+
+    def _create_pivot_csv(self, writer, detail_context, temp_report):
+        """Create CSV for pivot table data"""
         pivot_table = detail_context.get("pivot_table", {})
         pivot_index = detail_context.get("pivot_index", [])
         pivot_columns = detail_context.get("pivot_columns", [])
+        row_verbose_names = detail_context.get("row_group_verbose_names", [])
 
-        if not pivot_table or not pivot_index:
-            writer.writerow(["No pivot table data available"])
-            return response
+        # FILTER OUT ID-ONLY KEYS
+        pivot_table, pivot_index, pivot_columns = self.filter_pivot_data(
+            pivot_table, pivot_index, pivot_columns
+        )
 
-        # Create two-row header structure for CSV
-        # First row: Group names
-        group_header = ["Lead Status"]
-        campaign_header = ["Lead Status"]
+        if not pivot_table:
+            # Handle 0x0 configuration
+            simple_aggregate = detail_context.get("simple_aggregate", {})
+            aggregate_columns = detail_context.get("aggregate_columns", [])
 
-        current_group = None
-        group_size = 0
-
-        for col_name in pivot_columns:
-            if "|" in col_name:
-                group_name, campaign_type = col_name.split("|", 1)
+            if simple_aggregate or aggregate_columns:
+                writer.writerow(["Metric", "Value"])
+                if aggregate_columns:
+                    for agg in aggregate_columns:
+                        writer.writerow([agg["name"], agg["value"]])
+                elif simple_aggregate:
+                    metric_name = f"{simple_aggregate['function'].title()} of {simple_aggregate['field']}"
+                    writer.writerow([metric_name, simple_aggregate["value"]])
             else:
-                group_name = "Other"
-                campaign_type = col_name
+                writer.writerow(["No pivot table data available"])
+            return
 
-            if current_group != group_name:
-                current_group = group_name
-                group_size = 1
-            else:
-                group_size += 1
+        if not pivot_index:
+            writer.writerow(["No data available"])
+            return
 
-            group_header.append(group_name)
-            campaign_header.append(campaign_type)
+        row_header = row_verbose_names[0] if row_verbose_names else "Row Group"
 
-        # Write both header rows
-        writer.writerow(group_header)
-        writer.writerow(campaign_header)
+        # Check for hierarchical columns (1 row × 2 col)
+        has_hierarchical_columns = any(
+            col.count("|") == 3 and "||" in col for col in pivot_columns
+        )
+
+        if has_hierarchical_columns:
+            # Two-row header for hierarchical columns
+            group_header = [row_header]
+            column_header = [row_header]
+
+            for col_name in pivot_columns:
+                if "|" in col_name and "||" in col_name:
+                    # Find the pattern: "Display1||ID1|Display2||ID2"
+                    first_double_pipe = col_name.find("||")
+                    if first_double_pipe != -1:
+                        search_start = first_double_pipe + 2
+                        next_single_pipe = col_name.find("|", search_start)
+                        while (
+                            next_single_pipe != -1
+                            and next_single_pipe < len(col_name) - 1
+                            and col_name[next_single_pipe + 1] == "|"
+                        ):
+                            next_single_pipe = col_name.find("|", next_single_pipe + 2)
+
+                        if next_single_pipe != -1:
+                            group1_composite = col_name[:next_single_pipe]
+                            group2_composite = col_name[next_single_pipe + 1 :]
+                            group1_display = self.extract_display_value(
+                                group1_composite
+                            )
+                            group2_display = self.extract_display_value(
+                                group2_composite
+                            )
+                        else:
+                            group1_display = self.extract_display_value(col_name)
+                            group2_display = ""
+                    else:
+                        group1_display = self.extract_display_value(col_name)
+                        group2_display = ""
+
+                    group_header.append(group1_display)
+                    column_header.append(group2_display)
+                else:
+                    display_name = self.extract_display_value(col_name)
+                    group_header.append(display_name)
+                    column_header.append("")
+
+            writer.writerow(group_header)
+            writer.writerow(column_header)
+        else:
+            # Single-row header
+            header = [row_header]
+            for col_name in pivot_columns:
+                display_name = self.extract_display_value(col_name)
+                header.append(display_name)
+            writer.writerow(header)
 
         # Write data rows
-        lead_statuses = ["New", "Contacted", "Qualified", "Proposal", "Lost"]
-
-        for status in lead_statuses:
-            row = [status]
+        for row_key in pivot_index:
+            display_value = self.extract_display_value(row_key)
+            row = [display_value]
             for col_name in pivot_columns:
-                value = 0
-                if status in pivot_table and col_name in pivot_table[status]:
-                    value = pivot_table[status][col_name]
+                value = pivot_table.get(row_key, {}).get(col_name, 0)
                 row.append(value)
             writer.writerow(row)
 
         # Add totals row
         total_row = ["Total"]
         for col_name in pivot_columns:
-            total_value = 0
-            for status in lead_statuses:
-                if status in pivot_table and col_name in pivot_table[status]:
-                    total_value += pivot_table[status][col_name]
+            total_value = sum(
+                pivot_table.get(row_key, {}).get(col_name, 0) for row_key in pivot_index
+            )
             total_row.append(total_value)
         writer.writerow(total_row)
-
-        return response
-
-    def export_pdf(self, report, df, detail_context, temp_report):
-        """Export pivot table as PDF"""
-        response = HttpResponse(content_type="application/pdf")
-        response["Content-Disposition"] = (
-            f'attachment; filename="{report.name}_pivot.pdf"'
-        )
-
-        buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=1 * inch)
-        elements = []
-
-        # Styles
-        styles = getSampleStyleSheet()
-        title_style = ParagraphStyle(
-            "CustomTitle",
-            parent=styles["Heading1"],
-            fontSize=16,
-            spaceAfter=30,
-            alignment=1,  # Center
-        )
-
-        # Title
-        elements.append(Paragraph(f"Lead Report: {report.name}", title_style))
-        elements.append(Spacer(1, 12))
-
-        pivot_table = detail_context.get("pivot_table", {})
-        pivot_index = detail_context.get("pivot_index", [])
-        pivot_columns = detail_context.get("pivot_columns", [])
-
-        if not pivot_table or not pivot_index:
-            elements.append(
-                Paragraph("No pivot table data available", styles["Normal"])
-            )
-        else:
-            # Clean column names
-            clean_columns = []
-            for col_name in pivot_columns:
-                if "|" in col_name:
-                    clean_name = col_name.split("|")[-1]
-                else:
-                    clean_name = col_name
-                clean_columns.append(clean_name)
-
-            # Prepare data with headers
-            data_rows = [["Lead Status"] + clean_columns]
-
-            # Add data rows
-            lead_statuses = ["New", "Contacted", "Qualified", "Proposal", "Lost"]
-
-            for status in lead_statuses:
-                row = [status]
-                for col_name in pivot_columns:
-                    value = 0
-                    if status in pivot_table and col_name in pivot_table[status]:
-                        value = pivot_table[status][col_name]
-                    row.append(str(value))
-                data_rows.append(row)
-
-            # Add totals row
-            total_row = ["Total"]
-            for col_name in pivot_columns:
-                total_value = 0
-                for status in lead_statuses:
-                    if status in pivot_table and col_name in pivot_table[status]:
-                        total_value += pivot_table[status][col_name]
-                total_row.append(str(total_value))
-            data_rows.append(total_row)
-
-            # Create table with proper styling
-            data_table = Table(data_rows)
-            data_table.setStyle(
-                TableStyle(
-                    [
-                        ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
-                        ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-                        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                        ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
-                        ("FONTSIZE", (0, 0), (-1, -1), 9),
-                        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-                        ("TOPPADDING", (0, 0), (-1, -1), 8),
-                        ("GRID", (0, 0), (-1, -1), 1, colors.black),
-                        # Bold total row
-                        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
-                        ("BACKGROUND", (0, -1), (-1, -1), colors.lightgrey),
-                    ]
-                )
-            )
-
-            elements.append(data_table)
-
-        # Build PDF
-        doc.build(elements)
-        buffer.seek(0)
-        response.write(buffer.getvalue())
-        buffer.close()
-        return response
