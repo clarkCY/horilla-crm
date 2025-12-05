@@ -49,7 +49,7 @@
                         <button
                           hx-post="{% url 'leads:scoring_rule_criteria_delete' score_crite.pk  %}"
                           hx-target="#deleteModeBox"
-                          hx-swap="innerHTML" 
+                          hx-swap="innerHTML"
                           hx-trigger="click"
                           hx-vals='{"check_dependencies": "true"}'
                           onclick="openDeleteModeModal()">
@@ -63,7 +63,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <br> 
+      <br>
     {% else %}
       <div class="flex justify-between items-center h-20">
       </div>

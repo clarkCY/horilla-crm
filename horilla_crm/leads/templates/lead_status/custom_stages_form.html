@@ -3,13 +3,13 @@
 {% load i18n %}
 <div class="border border-[#efefef] rounded-md px-3 py-2 h-[250px] overflow-hidden overflow-y-auto">
     <h6 class="text-sm font-semibold text-gray-900 mb-4">{% trans 'Manage Custom Stages'%}</h6>
-    <form id="custom-stages-form" 
+    <form id="custom-stages-form"
       hx-post="{% url 'leads:save_custom_stages' company.id %}?initialization={{initialization}}"
       hx-target="#{{hx_target}}"
       hx-swap="{{hx_swap}}"
       hx-push-url="{{hx_push_url}}"
       {% if hx_select %}
-        hx-select="{{hx_select}}" 
+        hx-select="{{hx_select}}"
       {% endif %} >
       <div id="stages-container">
           {% with stages=company_stages|lookup:company.id %}
@@ -46,7 +46,7 @@
               </button>
             </div>
           </div>
-          
+
         </div>
         {% endfor %}
         {% endwith %}
@@ -58,7 +58,7 @@
           class="text-primary-600 hover:text-primary-800 text-xs font-semibold px-2 py-1 bg-primary-300 rounded border border-primary-200 transition-colors">
         {% trans 'Add Stage' %}
       </button>
- 
+
       <div class="flex justify-end gap-2 pt-3">
         <button type="submit"
           class="text-sm px-4 py-2 bg-primary-600 rounded-md hover:bg-primary-800 transition duration-300 text-[white]">
@@ -78,11 +78,11 @@
           if ($container.length === 0) {
               return;
           }
-  
+
           if (typeof Sortable === 'undefined' || typeof htmx === 'undefined') {
               return;
           }
-  
+
           function initializeSortable(container) {
               try {
                   new Sortable(container, {
@@ -108,15 +108,15 @@
                   });
               } catch (error) {}
           }
-  
+
           initializeSortable($container[0]);
-  
+
           $(document).on('htmx:afterSwap', function(event) {
               if ($(event.target).is('#stages-container') || $(event.target).closest('#stages-container').length) {
                   initializeSortable($container[0]);
               }
           });
-  
+
           $container.on('dragover', '.stage-item', function(evt) {
               evt.preventDefault();
           });

@@ -54,13 +54,13 @@
 
     // Prevent node buttons from triggering the parent click
     $(document).off('click.roleTreeButtons', '.member-footer .downline button');
-    $(document).on('click.roleTreeButtons', '.member-footer .downline button', function(e){ 
-      e.stopPropagation(); 
+    $(document).on('click.roleTreeButtons', '.member-footer .downline button', function(e){
+      e.stopPropagation();
     });
 
     // Mark second level expanded by default
     $('.genealogy-tree > ul > li').addClass('expanded');
-    
+
     // Adjust viewport after tree is initialized
     setTimeout(adjustViewport, 100);
   }
@@ -83,14 +83,14 @@
         e.preventDefault();
       }
     });
-    
+
     document.addEventListener('keyup', function(e){
       if (e.code === 'Space') {
         window.roleTreeState.isSpace = false;
         document.getElementById('viewport')?.classList.remove('hand','dragging');
       }
     });
-    
+
     window.roleTreeState.docHandlers = true;
   }
 
@@ -115,7 +115,7 @@
       window.roleTreeState.start.y = e.clientY;
       e.preventDefault();
     };
-    
+
     document._onMouseMove = function(e){
       if (!window.roleTreeState.isPanning) return;
       window.roleTreeState.base.tx += (e.clientX - window.roleTreeState.start.x);
@@ -124,21 +124,21 @@
       window.roleTreeState.start.y = e.clientY;
       setVars();
     };
-    
+
     document._onMouseUp = function(){
       if (window.roleTreeState.isPanning) {
         window.roleTreeState.isPanning = false;
         wrap.classList.remove('dragging');
       }
     };
-    
+
     plane._onClick = function(e){
-      if (window.roleTreeState.isPanning || window.roleTreeState.isSpace) { 
-        e.stopPropagation(); 
-        e.preventDefault(); 
+      if (window.roleTreeState.isPanning || window.roleTreeState.isSpace) {
+        e.stopPropagation();
+        e.preventDefault();
       }
     };
-    
+
     wrap._onWheel = function(e){
       if (!e.ctrlKey) return;
       e.preventDefault();
@@ -170,15 +170,15 @@
 
     const panStep = 50;
     const zoomStep = 0.1;
-    
+
     // Store references to handlers for cleanup
     const handlers = {};
-    
+
     // Zoom controls
     const zoomInBtn = document.getElementById('zoom-in');
     const zoomOutBtn = document.getElementById('zoom-out');
     const zoomResetBtn = document.getElementById('zoom-reset');
-    
+
     if (zoomInBtn) {
       handlers.zoomIn = function() {
         window.roleTreeState.scale = Math.min(2, window.roleTreeState.scale + zoomStep);
@@ -186,7 +186,7 @@
       };
       zoomInBtn.addEventListener('click', handlers.zoomIn);
     }
-    
+
     if (zoomOutBtn) {
       handlers.zoomOut = function() {
         window.roleTreeState.scale = Math.max(0.3, window.roleTreeState.scale - zoomStep);
@@ -194,7 +194,7 @@
       };
       zoomOutBtn.addEventListener('click', handlers.zoomOut);
     }
-    
+
     if (zoomResetBtn) {
       handlers.zoomReset = function() {
         window.roleTreeState.scale = 1;
@@ -204,13 +204,13 @@
       };
       zoomResetBtn.addEventListener('click', handlers.zoomReset);
     }
-    
+
     // Pan controls
     const panUpBtn = document.getElementById('pan-up');
     const panDownBtn = document.getElementById('pan-down');
     const panLeftBtn = document.getElementById('pan-left');
     const panRightBtn = document.getElementById('pan-right');
-    
+
     if (panUpBtn) {
       handlers.panUp = function() {
         window.roleTreeState.base.ty += panStep;
@@ -218,7 +218,7 @@
       };
       panUpBtn.addEventListener('click', handlers.panUp);
     }
-    
+
     if (panDownBtn) {
       handlers.panDown = function() {
         window.roleTreeState.base.ty -= panStep;
@@ -226,7 +226,7 @@
       };
       panDownBtn.addEventListener('click', handlers.panDown);
     }
-    
+
     if (panLeftBtn) {
       handlers.panLeft = function() {
         window.roleTreeState.base.tx += panStep;
@@ -234,7 +234,7 @@
       };
       panLeftBtn.addEventListener('click', handlers.panLeft);
     }
-    
+
     if (panRightBtn) {
       handlers.panRight = function() {
         window.roleTreeState.base.tx -= panStep;
@@ -242,7 +242,7 @@
       };
       panRightBtn.addEventListener('click', handlers.panRight);
     }
-    
+
     // Store handlers for cleanup
     window.roleTreeState._controlHandlers = handlers;
     window.roleTreeState.controlHandlers = true;
@@ -250,9 +250,9 @@
 
   function removeCanvasControls() {
     if (!window.roleTreeState._controlHandlers) return;
-    
+
     const handlers = window.roleTreeState._controlHandlers;
-    
+
     document.getElementById('zoom-in')?.removeEventListener('click', handlers.zoomIn);
     document.getElementById('zoom-out')?.removeEventListener('click', handlers.zoomOut);
     document.getElementById('zoom-reset')?.removeEventListener('click', handlers.zoomReset);
@@ -260,7 +260,7 @@
     document.getElementById('pan-down')?.removeEventListener('click', handlers.panDown);
     document.getElementById('pan-left')?.removeEventListener('click', handlers.panLeft);
     document.getElementById('pan-right')?.removeEventListener('click', handlers.panRight);
-    
+
     window.roleTreeState.controlHandlers = false;
     window.roleTreeState._controlHandlers = null;
   }
@@ -296,7 +296,7 @@
   document.body.addEventListener('htmx:afterSwap', function(evt){
     const target = evt.detail?.target;
     if (!target) return;
-    
+
     // Check if role-container was swapped
     if (target.id === 'role-container' || target.querySelector('#role-container') || target.closest('#role-container')) {
       // Small delay to ensure DOM is ready
@@ -312,7 +312,7 @@
   document.body.addEventListener('htmx:load', function(evt){
     const target = evt.detail?.elt;
     if (!target) return;
-    
+
     if (target.id === 'role-container' || target.querySelector('#role-container')) {
       setTimeout(function() {
         initRoleTree();
