@@ -374,10 +374,18 @@ class OpportunitySingleFormView(LoginRequiredMixin, HorillaSingleFormView):
     @cached_property
     def form_url(self):
         """Form URL for lead"""
-        pk = self.kwargs.get("pk") or self.request.GET.get("id")
+        pk = self.kwargs.get("pk")
         if pk:
-            return reverse_lazy("campaigns:campaign_single_edit", kwargs={"pk": pk})
-        return reverse_lazy("campaigns:campaign_single_create")
+            return reverse_lazy(
+                "opportunities:opportunity_single_edit", kwargs={"pk": pk}
+            )
+        return reverse_lazy("opportunities:opportunity_single_create")
+
+    def get_initial(self):
+        initial = super().get_initial()
+        account_id = self.request.GET.get("id")
+        initial["account"] = account_id
+        return initial
 
 
 @method_decorator(htmx_required, name="dispatch")
