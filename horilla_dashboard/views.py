@@ -511,16 +511,28 @@ class DashboardDetailView(RecentlyViewedMixin, LoginRequiredMixin, TemplateView)
 
             section_info = get_section_info_for_model(model)
 
+            # In get_chart_data method, replace the label handling section:
+
             for item in chart_data:
                 label_value = item[group_by_field]
 
+                # Handle display value for choice fields and foreign keys
                 try:
                     field = model._meta.get_field(group_by_field)
                     if hasattr(field, "choices") and field.choices:
+                        # Handle choice fields - convert key to display value
                         for choice_value, choice_label in field.choices:
                             if choice_value == label_value:
                                 label_value = choice_label
                                 break
+                    elif field.is_relation and label_value is not None:
+                        # Handle foreign key fields - get the string representation
+                        related_model = field.related_model
+                        try:
+                            related_obj = related_model.objects.get(pk=label_value)
+                            label_value = str(related_obj)
+                        except related_model.DoesNotExist:
+                            pass
                 except:
                     pass
 
@@ -529,11 +541,11 @@ class DashboardDetailView(RecentlyViewedMixin, LoginRequiredMixin, TemplateView)
                 )
                 data.append(float(item["value"]) if item["value"] is not None else 0)
 
+                # For the filter URL, use the original value (key for choices, ID for FK)
                 filter_value = item[group_by_field]
                 try:
                     field = model._meta.get_field(group_by_field)
                     if field.is_relation:
-                        # For foreign keys, use the ID instead of the display value
                         filter_value = item.get(f"{group_by_field}_id", filter_value)
                 except:
                     pass
@@ -2348,20 +2360,44 @@ class DashboardComponentChartView(View):
                 section_info = get_section_info_for_model(model)
 
                 for item in queryset:
+                    # Get the raw label value
                     label = item.get(
                         f"{component.grouping_field}__name"
                         if field.is_relation
                         and hasattr(field.remote_field.model, "name")
                         else component.grouping_field
                     )
+
+                    # Convert choice field keys to display values
+                    try:
+                        if hasattr(field, "choices") and field.choices:
+                            original_label = label
+                            for choice_value, choice_label in field.choices:
+                                if choice_value == original_label:
+                                    label = choice_label
+                                    break
+                        elif field.is_relation and label is not None:
+                            # For FK fields without 'name' attribute, get string representation
+                            if not hasattr(field.remote_field.model, "name"):
+                                try:
+                                    related_obj = field.remote_field.model.objects.get(
+                                        pk=label
+                                    )
+                                    label = str(related_obj)
+                                except:
+                                    pass
+                    except:
+                        pass
+
                     if isinstance(label, (list, dict)):
                         label = str(label)
                     elif label is None:
                         label = "None"
 
-                    labels.append(label)
+                    labels.append(str(label))
                     data.append(float(item["value"]))
 
+                    # For filter URL, use the actual filter value (ID for FK, key for choices)
                     filter_value = label
                     if field.is_relation:
                         filter_value = item.get(f"{component.grouping_field}_id")

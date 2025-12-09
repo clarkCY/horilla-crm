@@ -134,6 +134,11 @@ class DefaultDashboardGenerator:
 
                 if callable(chart_func):
                     chart = chart_func(self, queryset, model_info)
+
+                    # Post-process chart data to handle choice fields
+                    if chart and isinstance(chart, dict) and "data" in chart:
+                        chart = self._convert_choice_labels_in_chart(chart, model_class)
+
                     charts.append(chart)
 
             except Exception as e:
@@ -141,6 +146,61 @@ class DefaultDashboardGenerator:
                 logger.warning("Failed to generate chart for : %s", e)
 
         return charts
+
+    def _convert_choice_labels_in_chart(self, chart, model_class):
+        """
+        Generic method to convert choice field keys to display values in chart data
+        """
+        try:
+            chart_data = chart.get("data", {})
+            labels = chart_data.get("labels", [])
+
+            if not labels:
+                return chart
+
+            # Try to find which field is being used by checking labelField or title
+            label_field = chart_data.get("labelField", "")
+
+            # Convert labelField back to field name (e.g., "Account Type" -> "account_type")
+            field_name = label_field.lower().replace(" ", "_")
+
+            # Try to get the field object
+            field_obj = None
+            try:
+                field_obj = model_class._meta.get_field(field_name)
+            except:
+                # If exact match fails, try to find a field that matches
+                for field in model_class._meta.fields:
+                    if (
+                        field.name.lower() == field_name
+                        or field.verbose_name.lower() == label_field.lower()
+                    ):
+                        field_obj = field
+                        field_name = field.name
+                        break
+
+            # If we found the field and it has choices, convert the labels
+            if field_obj and hasattr(field_obj, "choices") and field_obj.choices:
+                new_labels = []
+                for label in labels:
+                    # Try to find matching choice
+                    converted = False
+                    for choice_value, choice_label in field_obj.choices:
+                        if str(choice_value) == str(label) or choice_value == label:
+                            new_labels.append(choice_label)
+                            converted = True
+                            break
+
+                    if not converted:
+                        new_labels.append(label)
+
+                chart_data["labels"] = new_labels
+
+            return chart
+
+        except Exception as e:
+            logger.warning(f"Failed to convert choice labels in chart: {e}")
+            return chart
 
     def get_date_field(self, model_class):
         """Get the first date field from model"""
