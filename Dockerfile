@@ -8,7 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     SECRET_KEY=changeme \
     ALLOWED_HOSTS=*
 
-# 2. Install System Dependencies
+# 2. Install System Dependencies (Basic)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        build-essential \
@@ -16,6 +16,7 @@ RUN apt-get update \
        libjpeg-dev \
        zlib1g-dev \
        curl \
+       gnupg2 \
        netcat-openbsd \
        git \
        libcairo2-dev \
@@ -27,23 +28,35 @@ RUN apt-get update \
        shared-mime-info \
     && rm -rf /var/lib/apt/lists/*
 
+# 2.5. FIX: Install Microsoft ODBC Drivers for Azure SQL
+# This adds the Microsoft repo and installs the driver required for Azure SQL
+RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - && \
+    curl https://packages.microsoft.com/config/debian/11/prod.list > /etc/apt/sources.list.d/mssql-release.list && \
+    apt-get update && \
+    ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
+
 WORKDIR /app
 
 # 3. Copy files
 COPY . /app/
 
-# 4. Install Dependencies (Make sure dj-database-url is here)
+# 4. Install Dependencies
+# Added 'mssql-django' and 'pyodbc' for Azure connection
 RUN pip install --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt uvicorn[standard] psycopg2-binary gunicorn dj-database-url
+    pip install --no-cache-dir -r requirements.txt uvicorn[standard] psycopg2-binary gunicorn dj-database-url mssql-django pyodbc
 
-# 5. FIX: Create local_settings.py with a SAFE Fallback
-# We set a default='sqlite://...' so the build doesn't crash if DATABASE_URL is missing
-RUN echo "from .base import *" > horilla/settings/local_settings.py && \
-    echo "import dj_database_url" >> horilla/settings/local_settings.py && \
-    echo "import os" >> horilla/settings/local_settings.py && \
-    echo "DATABASES = {'default': dj_database_url.config(default='sqlite:///db.sqlite3', conn_max_age=600)}" >> horilla/settings/local_settings.py && \
-    echo "CSRF_TRUSTED_ORIGINS = ['https://*.railway.app', 'https://*.up.railway.app']" >> horilla/settings/local_settings.py && \
-    echo "SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')" >> horilla/settings/local_settings.py
+# 5. Configure Settings for TWO Databases
+# Default = Railway Postgres
+# ERP_Data = Azure SQL (We pull this from a variable called AZURE_SQL_URL)
+RUN printf "from .base import *\n\
+import dj_database_url\n\
+import os\n\
+DATABASES = {\n\
+    'default': dj_database_url.config(default='sqlite:///db.sqlite3', conn_max_age=600),\n\
+    'erp_data': dj_database_url.parse(os.environ.get('AZURE_SQL_URL', 'sqlite:///erp_fallback.sqlite3'))\n\
+}\n\
+CSRF_TRUSTED_ORIGINS = ['https://*.railway.app', 'https://*.up.railway.app']\n\
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')\n" > horilla/settings/local_settings.py
 
 # 6. Admin Creation Script
 RUN echo "import os" > /app/create_admin.py && \
