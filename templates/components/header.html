@@ -1,6 +1,6 @@
 {% load static i18n horilla_tags %}
 <div class="h-[85px] flex justify-end md:justify-between items-center bg-[#fff] py-5 px-5 border-b border-b-primary-400 fixed w-[calc(100%-76px)] z-40">
-    <h1 class="hidden lg:block text-2xl font-semibold text-secondary-900">{% trans 'Horilla CRM' %}</h1>
+    <h1 class="hidden lg:block text-2xl font-semibold text-secondary-900">{% trans 'EGI CRM' %}</h1>
     <div class="relative hidden md:block">
         <input id="header-search" type="text" name="q" placeholder="Search anything..." class="pl-10 pr-4 py-2 text-dark-400 rounded-lg border border-secondary-200 focus:outline-none focus:border-primary-300 w-64 placeholder:text-dark-50"
         hx-get="{% url 'horilla_generics:global_search' %}?{% if request.GET.q %}q={{ request.GET.q }}&{% endif %}{% if request.GET.filter %}filter={{ request.GET.filter }}&{% endif %}{% if request.GET.section %}section={{ request.GET.section }}&{% endif %}prev_url={{ request.get_full_path|remove_query_param:"section" }}"
