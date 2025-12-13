@@ -32,19 +32,18 @@ WORKDIR /app
 # 3. Copy files
 COPY . /app/
 
-# 4. FIX: Install dj-database-url explicitly
-# We add this to ensure we can parse the Railway DATABASE_URL
+# 4. Install Dependencies (Make sure dj-database-url is here)
 RUN pip install --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements.txt uvicorn[standard] psycopg2-binary gunicorn dj-database-url
 
-# 5. FIX: Configure Settings to FORCE PostgreSQL
-# We inject code to read the DATABASE_URL variable
-RUN printf "from .base import *\n\
-import dj_database_url\n\
-import os\n\
-DATABASES = {'default': dj_database_url.config(default=os.environ.get('DATABASE_URL'), conn_max_age=600)}\n\
-CSRF_TRUSTED_ORIGINS = ['https://*.railway.app', 'https://*.up.railway.app']\n\
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')\n" > horilla/settings/local_settings.py
+# 5. FIX: Create local_settings.py with a SAFE Fallback
+# We set a default='sqlite://...' so the build doesn't crash if DATABASE_URL is missing
+RUN echo "from .base import *" > horilla/settings/local_settings.py && \
+    echo "import dj_database_url" >> horilla/settings/local_settings.py && \
+    echo "import os" >> horilla/settings/local_settings.py && \
+    echo "DATABASES = {'default': dj_database_url.config(default='sqlite:///db.sqlite3', conn_max_age=600)}" >> horilla/settings/local_settings.py && \
+    echo "CSRF_TRUSTED_ORIGINS = ['https://*.railway.app', 'https://*.up.railway.app']" >> horilla/settings/local_settings.py && \
+    echo "SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')" >> horilla/settings/local_settings.py
 
 # 6. Admin Creation Script
 RUN echo "import os" > /app/create_admin.py && \
