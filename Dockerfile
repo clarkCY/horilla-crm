@@ -9,6 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     ALLOWED_HOSTS=*
 
 # 2. Install System Dependencies
+# (Removed Microsoft ODBC drivers and GPG keys)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        build-essential \
@@ -16,7 +17,6 @@ RUN apt-get update \
        libjpeg-dev \
        zlib1g-dev \
        curl \
-       gnupg2 \
        netcat-openbsd \
        git \
        libcairo2-dev \
@@ -28,33 +28,22 @@ RUN apt-get update \
        shared-mime-info \
     && rm -rf /var/lib/apt/lists/*
 
-# 2.5. FIX: Install Microsoft ODBC Drivers (Debian 12 Compatible)
-# We use 'gpg --dearmor' instead of 'apt-key' (which is deleted in newer Linux)
-# We also switched to the 'debian/12' repo to match the python:3.10-slim image
-RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg \
-    && curl https://packages.microsoft.com/config/debian/12/prod.list > /etc/apt/sources.list.d/mssql-release.list \
-    && apt-get update \
-    && ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
-
 WORKDIR /app
 
 # 3. Copy files
 COPY . /app/
 
-# 4. Install Python Dependencies
+# 4. Install Dependencies
+# (Removed mssql-django and pyodbc)
 RUN pip install --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt uvicorn[standard] psycopg2-binary gunicorn dj-database-url mssql-django pyodbc
+    pip install --no-cache-dir -r requirements.txt uvicorn[standard] psycopg2-binary gunicorn dj-database-url
 
-# 5. Configure Settings for TWO Databases
-# Default = Railway Postgres
-# ERP_Data = Azure SQL (We pull this from a variable called AZURE_SQL_URL)
+# 5. Configure Settings
+# (Removed the 'erp_data' secondary database connection)
 RUN printf "from .base import *\n\
 import dj_database_url\n\
 import os\n\
-DATABASES = {\n\
-    'default': dj_database_url.config(default='sqlite:///db.sqlite3', conn_max_age=600),\n\
-    'erp_data': dj_database_url.parse(os.environ.get('AZURE_SQL_URL', 'sqlite:///erp_fallback.sqlite3'))\n\
-}\n\
+DATABASES = {'default': dj_database_url.config(default='sqlite:///db.sqlite3', conn_max_age=600)}\n\
 CSRF_TRUSTED_ORIGINS = ['https://*.railway.app', 'https://*.up.railway.app']\n\
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')\n" > horilla/settings/local_settings.py
 
