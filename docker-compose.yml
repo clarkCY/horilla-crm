@@ -14,7 +14,7 @@ services:
       - CSRF_TRUSTED_ORIGINS=http://localhost:8000
       - DATABASE_URL=postgres://horilla_user:horilla_pass@db:5432/horilla_db
     depends_on:
-      - 
+      - db
 
   db:
     image: postgres:16-alpine
